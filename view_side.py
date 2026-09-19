@@ -9,7 +9,7 @@ import queue
 import pandas as pd
 
 # 定数
-ROUND_NUM = 17
+ROUND_NUM = 18
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値

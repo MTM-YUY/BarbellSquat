@@ -15,7 +15,7 @@ import torch.nn.functional as F
 # ============================================================
 # 定数
 # ============================================================
-ROUND_NUM = 17
+ROUND_NUM = 18
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
