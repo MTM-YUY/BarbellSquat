@@ -9,16 +9,20 @@ import queue
 import pandas as pd
 
 # 定数
-ROUND_NUM = 18
+ROUND_NUM = 19
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
+CAMERA_VIEW_THRESHOLD = 25 # 画角が正しいか否かを判断する閾値
+
+# フラグ
+camera_view_ok_flg = None
 
 print("CUDA available:", torch.cuda.is_available())
 
 # 右半身のランドマークインデックス
-RIGHT_INDICES = [5, 10, 12, 24, 26, 30, 32]
+RIGHT_INDICES = [5, 10, 11, 12, 23, 24, 25, 26, 27, 30, 32]
 
 POSE_LANDMARKS = {
     "right_eye": 5,
@@ -28,6 +32,9 @@ POSE_LANDMARKS = {
     "right_knee": 26,
     "right_heel": 30,
     "right_foot_index": 32,
+    "left_shoulder": 11,
+    "left_hip": 23,
+    "left_knee": 25,
 }
 
 RIGHT_CONNECTIONS = [
@@ -35,6 +42,9 @@ RIGHT_CONNECTIONS = [
     (12, 24),
     (24, 26),
     (26, 30),
+    (11, 23),
+    (23, 25),
+    (25, 27),
 ]
 
 REVIEW_COMMENTS = {
@@ -62,11 +72,13 @@ HUD_LAYOUT = {
     "reps":              (30, 60,  COLOR_GREEN),    # rep回数
     "recording":         (30, 90,  COLOR_MAGENTA),  # rep記録中フラグ("now")
     "theta_head_body":   (30, 120, COLOR_CYAN),     # 頭と身体の角度差
-    "head_tilt":         (30, 150, COLOR_RED),     # 頭の向き警告(head_not_tilt/head_too_tilt)
+    "head_tilt":         (30, 150, COLOR_RED),      # 頭の向き警告(head_not_tilt/head_too_tilt)
     "depth_result":      (30, 180, COLOR_RED),      # rep終了後のしゃがみ深度判定結果
     "torso_too_upright": (30, 180, COLOR_RED),      # 体幹が直立しすぎ
     "torso_too_forward": (30, 180, COLOR_RED),      # 体幹が前傾しすぎ
     "torso_ok":          (30, 180, COLOR_GREEN),    # 体幹おｋ
+    "camera_view_NG":    (100, 30, COLOR_RED),      # カメラの画角NG
+    "camera_view_OK":    (100, 30, COLOR_GREEN),    # カメラの画角OK
 }
 
 
@@ -210,6 +222,27 @@ def get_point(landmarks, key: str, frame_shape) -> Points:
     h, w = frame_shape[:2]
     lm = landmarks[POSE_LANDMARKS[key]]
     return Points(int(lm.x * w), int(lm.y * h))
+
+
+def check_camera_view(left_shoulder: Points, right_shoulder: Points, left_hip: Points, right_hip: Points, left_knee: Points, right_knee: Points) -> tuple[bool, float]:
+    left_shoulder_points = (left_shoulder.x, left_shoulder.y)
+    right_shoulder_points = (right_shoulder.x, right_shoulder.y)
+    left_hip_points = (left_hip.x, left_hip.y)
+    right_hip_points = (right_hip.x, right_hip.y)
+    left_knee_points = (left_knee.x, left_knee.y)
+    right_knee_points = (right_knee.x, right_knee.y)
+
+    shoulder_distance = np.linalg.norm(np.array(left_shoulder_points) - np.array(right_shoulder_points))
+    hip_distance = np.linalg.norm(np.array(left_hip_points) - np.array(right_hip_points))
+    knee_distance = np.linalg.norm(np.array(left_knee_points) - np.array(right_knee_points))
+
+    body_distance = shoulder_distance + hip_distance + knee_distance
+    
+    if body_distance < CAMERA_VIEW_THRESHOLD:
+        return True, body_distance
+    else:
+        return False, body_distance
+
 
 
 def determine_status(hip_deque: deque, threshold: int) -> str:
@@ -385,9 +418,16 @@ def main():
             rep_state.tick()
             draw_label(frame, "recording", "now")
 
+            # カメラの画角チェック
+            if rep_state.frame_count == 1:
+                camera_view_ok_flg, body_distance = check_camera_view(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
+                if camera_view_ok_flg == True:
+                    draw_label(frame, "camera_view_OK", f"camera_view_OK:{body_distance:.2f}")
+                elif camera_view_ok_flg == False:
+                    draw_label(frame, "camera_view_NG", f"camera_view_NG:{body_distance:.2f}")
+
             # 体感前傾角度の良否判定
             if status == "stay" and before_status == "down":
-                print("はいったはいった\n")
                 torso_tilt_flg, torso_tilt = judge_torso_tilt(pt["right_hip"], pt["right_shoulder"])
                 if torso_tilt_flg == "too_upright":
                     print("upright")
