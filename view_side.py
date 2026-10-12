@@ -14,7 +14,7 @@ RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
-CAMERA_VIEW_THRESHOLD = 25 # 画角が正しいか否かを判断する閾値
+CAMERA_VIEW_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値
 
 # フラグ
 camera_view_ok_flg = None
@@ -22,7 +22,7 @@ camera_view_ok_flg = None
 print("CUDA available:", torch.cuda.is_available())
 
 # 右半身のランドマークインデックス
-RIGHT_INDICES = [5, 10, 11, 12, 23, 24, 25, 26, 27, 30, 32]
+LANDMARKS_INDICES = [5, 10, 11, 12, 23, 24, 25, 26, 27, 30, 32]
 
 POSE_LANDMARKS = {
     "right_eye": 5,
@@ -204,7 +204,7 @@ def resolve_video_path(video_path: str) -> str:
 def draw_landmarks(frame, landmarks, frame_shape):
     """右半身の骨格を描画する。"""
     h, w = frame_shape[:2]
-    for i in RIGHT_INDICES:
+    for i in LANDMARKS_INDICES:
         if i == 32:
             continue
         lm = landmarks[i]
@@ -224,7 +224,8 @@ def get_point(landmarks, key: str, frame_shape) -> Points:
     return Points(int(lm.x * w), int(lm.y * h))
 
 
-def check_camera_view(left_shoulder: Points, right_shoulder: Points, left_hip: Points, right_hip: Points, left_knee: Points, right_knee: Points) -> tuple[bool, float]:
+def check_camera_view_from_distance(left_shoulder: Points, right_shoulder: Points, left_hip: Points, right_hip: Points, left_knee: Points, right_knee: Points) -> tuple[bool, float]:
+    """両肩・両腰・両膝の位置関係からカメラ画角の正常異常を判定"""
     left_shoulder_points = (left_shoulder.x, left_shoulder.y)
     right_shoulder_points = (right_shoulder.x, right_shoulder.y)
     left_hip_points = (left_hip.x, left_hip.y)
@@ -239,10 +240,19 @@ def check_camera_view(left_shoulder: Points, right_shoulder: Points, left_hip: P
     body_distance = shoulder_distance + hip_distance + knee_distance
     
     if body_distance < CAMERA_VIEW_THRESHOLD:
-        return True, body_distance
+        return True, body_distance # 画角OK
     else:
-        return False, body_distance
+        return False, body_distance # 画角NG
 
+
+def check_camera_view_from_mediapipe_reliability(landmarks) -> tuple[bool, float]:
+    left_knee_reliability = landmarks[POSE_LANDMARKS["left_knee"]].visibility
+    print(f"left_elbow_visibility:{left_knee_reliability}")
+    
+    if 0.5 <= left_knee_reliability:
+        return True, left_knee_reliability # 画角OK
+    else:
+        return False, left_knee_reliability # 画角NG
 
 
 def determine_status(hip_deque: deque, threshold: int) -> str:
@@ -420,7 +430,14 @@ def main():
 
             # カメラの画角チェック
             if rep_state.frame_count == 1:
-                camera_view_ok_flg, body_distance = check_camera_view(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
+                camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
+                camera_view_ok_flg_from_mediapipe_reliability, left_knee_reliability = check_camera_view_from_mediapipe_reliability(landmarks)
+
+                if camera_view_ok_flg_from_distance == True and camera_view_ok_flg_from_mediapipe_reliability == True:
+                    camera_view_ok_flg == True
+                else:
+                    camera_view_ok_flg == False
+
                 if camera_view_ok_flg == True:
                     draw_label(frame, "camera_view_OK", f"camera_view_OK:{body_distance:.2f}")
                 elif camera_view_ok_flg == False:
