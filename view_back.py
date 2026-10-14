@@ -15,12 +15,14 @@ import torch.nn.functional as F
 # ============================================================
 # 定数
 # ============================================================
-ROUND_NUM = 18
+ROUND_NUM = 19
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
+CAUTION_THRESHOLD = 3 # バーベルの傾き注意する閾値
+WARNING_THRESHOLD = 5 # バーベルの傾き警告する閾値
 
-"""ニーイン推論モデル　指定"""
+"""ニーイン推論モデル 指定"""
 ####################
 MODEL_PATH = '../JudgeKneeValgus/JudgeKneeValgusModel.pth'
 CLASS_NAMES = ['knee_valgus', 'not_knee_valgus']
@@ -256,13 +258,11 @@ def detect_barbell_tilt(left_wrist: Points, right_wrist: Points) -> str:
     )
     deg_barbell_tilt = abs(math.degrees(rad_barbell_tilt))
 
-    caution_threshold = 2
-    warning_threshold = 5
 
     # print(f"def:{deg_barbell_tilt}")
-    if deg_barbell_tilt < caution_threshold:
+    if deg_barbell_tilt < CAUTION_THRESHOLD:
         comment = "none"
-    elif deg_barbell_tilt < warning_threshold:
+    elif deg_barbell_tilt < WARNING_THRESHOLD:
         comment = "caution"
     else:
         comment = "warning"
