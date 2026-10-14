@@ -14,7 +14,9 @@ RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
-CAMERA_VIEW_THRESHOLD = 25 # 画角が正しいか否かを判断する閾値
+TORSO_TOO_UPRIGHT = 35
+TORSO_TOO_FORWARD = 45
+CAMERA_VIEW_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値
 
 # フラグ
 camera_view_ok_flg = None
@@ -299,9 +301,9 @@ def judge_torso_tilt(hip_point: Points, shoulder_point: Points) -> tuple[str, in
     print(f"angle = {angle_deg}")
 
     """35度未満は直立すぎ、45度以上は前傾すぎ"""
-    if 45 < angle_deg:
+    if TORSO_TOO_FORWARD < angle_deg:
         return "too_forward", angle_deg
-    elif angle_deg < 35:
+    elif angle_deg < TORSO_TOO_UPRIGHT:
         return "too_upright", angle_deg
     else:
         return "none", angle_deg
