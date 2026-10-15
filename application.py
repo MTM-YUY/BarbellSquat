@@ -7,6 +7,11 @@ import cv2
 from PIL import Image, ImageTk
 import sys
 
+# ===== 出力先の設定 =====
+# view_back.py / view_side.py の ROUND_NUM と合わせること（結果は ../result/<ROUND_NUM>/ 以下に出力される）
+ROUND_NUM = 20
+RESULT_ROOT = os.path.join('..', 'result', str(ROUND_NUM))
+
 # グローバル変数
 video_label = None   # 動画表示用Label
 video_cap = None     # OpenCV VideoCaptureオブジェクト
@@ -24,16 +29,20 @@ mode_frame = None             # モード選択フレーム
 
 # ===== 動画処理関係 =====
 
-def run_view_script(script_name, video_path):
-    subprocess.run(['python', script_name, video_path])
+def run_view_script(script_name, video_path, output_dir=None):
+    """view_*.py を実行する。output_dir を渡すとその場所に結果を出力させる（省略時は従来の出力先）"""
+    cmd = ['python', script_name, video_path]
+    if output_dir:
+        cmd.append(output_dir)
+    return subprocess.run(cmd).returncode
 
-def process_video(mode, file_path):
+def process_video(mode, file_path, output_dir=None):
     """指定モードで動画を処理し、結果を表示・DLボタン追加"""
     if mode == 'back':
-        run_view_script('view_back.py', file_path)
+        run_view_script('view_back.py', file_path, output_dir)
         output_path = '../output_back.mp4'
     elif mode == 'side':
-        run_view_script('view_side.py', file_path)
+        run_view_script('view_side.py', file_path, output_dir)
         output_path = '../output_side.mp4'
     else:
         return
@@ -43,6 +52,56 @@ def process_video(mode, file_path):
         enable_download(output_path)
     else:
         print(f"処理後の動画が見つかりません: {output_path}")
+
+# ===== 「両方」モード用：出力フォルダ名の決定とreviewの統合 =====
+
+def video_stem(path):
+    return os.path.splitext(os.path.basename(path))[0]
+
+def make_group_name(back_path, side_path):
+    """まとめフォルダ名を決める。
+    両ファイル名の共通部分（先頭から一致する部分）+ "_back_side"
+      例) MTM_back.mp4 / MTM_side.mp4 -> MTM_back_side
+    共通部分が無い場合は "<後視点名>_<横視点名>_back_side"
+    """
+    back_stem, side_stem = video_stem(back_path), video_stem(side_path)
+    prefix = os.path.commonprefix([back_stem, side_stem]).rstrip('_- ')
+    if prefix:
+        return f"{prefix}_back_side"
+    return f"{back_stem}_{side_stem}_back_side"
+
+def make_group_dirs(back_path, side_path):
+    """(まとめフォルダ, 後視点の出力先, 横視点の出力先) を返す"""
+    group_dir = os.path.join(RESULT_ROOT, make_group_name(back_path, side_path))
+    back_name, side_name = video_stem(back_path), video_stem(side_path)
+    if back_name == side_name:
+        # 同名ファイルだと出力が衝突するため、視点名を付けて区別する
+        back_name, side_name = f"{back_name}_back", f"{side_name}_side"
+    return group_dir, os.path.join(group_dir, back_name), os.path.join(group_dir, side_name)
+
+def read_review_lines(review_path):
+    """review.txt の空行を除いた行リストを返す（無ければ None）"""
+    if not os.path.isfile(review_path):
+        return None
+    with open(review_path, encoding='utf-8') as f:
+        return [line.strip() for line in f if line.strip()]
+
+def merge_reviews(group_dir, back_dir, side_dir):
+    """後視点・横視点の review.txt を統合し、group_dir 直下に review.txt として出力する"""
+    back_lines = read_review_lines(os.path.join(back_dir, 'review.txt'))
+    side_lines = read_review_lines(os.path.join(side_dir, 'review.txt'))
+    if back_lines is None or side_lines is None:
+        print("review.txt が見つからない視点があるため、統合reviewを作成できませんでした。")
+        return None
+
+    out = ["【後視点】"] + (back_lines or ["・指摘事項はありません"])
+    out += ["", "【横視点】"] + (side_lines or ["・指摘事項はありません"])
+
+    review_path = os.path.join(group_dir, 'review.txt')
+    with open(review_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(out) + "\n")
+    print(f"統合reviewを出力しました: {review_path}")
+    return review_path
 
 def on_start_processing():
     """処理開始ボタン押下時の処理"""
@@ -55,9 +114,17 @@ def on_start_processing():
         process_video('side', side_file_path)
 
     elif selected_mode == 'both':
+        # 1つのフォルダにまとめて出力する
+        #   <group_dir>/<後視点名>/ , <group_dir>/<横視点名>/ , <group_dir>/review.txt
+        group_dir, back_dir, side_dir = make_group_dirs(back_file_path, side_file_path)
+        os.makedirs(group_dir, exist_ok=True)
+
         # 後視点 → 横視点の順に処理
-        process_video('back', back_file_path)
-        process_video('side', side_file_path)
+        process_video('back', back_file_path, back_dir)
+        process_video('side', side_file_path, side_dir)
+
+        # 両方の review を統合して group_dir 直下に出力
+        merge_reviews(group_dir, back_dir, side_dir)
 
 def update_start_button():
     """選択状況に応じて処理開始ボタンの有効/無効を切り替え"""

@@ -9,7 +9,7 @@ import queue
 import pandas as pd
 
 # 定数
-ROUND_NUM = 19
+ROUND_NUM = 20
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
@@ -320,7 +320,7 @@ def judge_torso_tilt(hip_point: Points, shoulder_point: Points) -> tuple[str, in
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python view_side.py <video_path>")
+        print("Usage: python view_side.py <video_path> [output_dir]")
         sys.exit(1)
 
     video_path = resolve_video_path(sys.argv[1])
@@ -330,7 +330,11 @@ def main():
     start_time = time.time()
 
     # ディレクトリ初期化
-    base_path = f"../result/{ROUND_NUM}/{mov_name}"
+    # 第2引数で出力先フォルダが渡された場合はそれを使う（「両方」モード用）。省略時は従来どおり
+    if len(sys.argv) >= 3:
+        base_path = sys.argv[2]
+    else:
+        base_path = f"../result/{ROUND_NUM}/{mov_name}"
     csv_dir = os.path.join(base_path, "csvfile")
     save_review_path = os.path.join(base_path, "review.txt")
     for d in [base_path, csv_dir]:

@@ -15,7 +15,7 @@ import torch.nn.functional as F
 # ============================================================
 # 定数
 # ============================================================
-ROUND_NUM = 19
+ROUND_NUM = 20
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
@@ -312,7 +312,7 @@ def inference_knee_valgus(input_csv_path):
 # ============================================================
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python view_back.py <video_path>")
+        print("Usage: python view_back.py <video_path> [output_dir]")
         sys.exit(1)
 
     video_path = resolve_video_path(sys.argv[1])
@@ -320,7 +320,11 @@ def main():
 
     start_time = time.time()
 
-    base_path = f"../result/{ROUND_NUM}/{mov_name}"
+    # 第2引数で出力先フォルダが渡された場合はそれを使う（「両方」モード用）。省略時は従来どおり
+    if len(sys.argv) >= 3:
+        base_path = sys.argv[2]
+    else:
+        base_path = f"../result/{ROUND_NUM}/{mov_name}"
     save_review_path = os.path.join(base_path, "review.txt")
     save_knee_valgus_csv_path = os.path.join(base_path, f"{mov_name}_knee_valgus_inference.csv")
     os.makedirs(base_path, exist_ok=True)
