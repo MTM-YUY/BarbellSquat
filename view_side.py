@@ -17,6 +17,7 @@ POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
 TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
 CAMERA_VIEW_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値
+CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.003 # 画角が正常か否かを判断する閾値で，MediaPipeの信頼度(左肩)
 
 # フラグ
 camera_view_ok_flg = None
@@ -30,11 +31,13 @@ POSE_LANDMARKS = {
     "right_eye": 5,
     "right_mouth": 10,
     "right_shoulder": 12,
+    "right_elbow": 14,
     "right_hip": 24,
     "right_knee": 26,
     "right_heel": 30,
     "right_foot_index": 32,
     "left_shoulder": 11,
+    "left_elbow": 13,
     "left_hip": 23,
     "left_knee": 25,
 }
@@ -248,13 +251,13 @@ def check_camera_view_from_distance(left_shoulder: Points, right_shoulder: Point
 
 
 def check_camera_view_from_mediapipe_reliability(landmarks) -> tuple[bool, float]:
-    left_knee_reliability = landmarks[POSE_LANDMARKS["left_knee"]].visibility
-    print(f"left_elbow_visibility:{left_knee_reliability}")
+    left_shoulder_reliability = landmarks[POSE_LANDMARKS["left_elbow"]].visibility
+    print(f"left_elbow_visibility:{left_shoulder_reliability}")
     
-    if 0.5 <= left_knee_reliability:
-        return True, left_knee_reliability # 画角OK
+    if left_shoulder_reliability < CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD:
+        return True, left_shoulder_reliability # 画角OK
     else:
-        return False, left_knee_reliability # 画角NG
+        return False, left_shoulder_reliability # 画角NG
 
 
 def determine_status(hip_deque: deque, threshold: int) -> str:
@@ -437,12 +440,12 @@ def main():
             # カメラの画角チェック
             if rep_state.frame_count == 1:
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
-                camera_view_ok_flg_from_mediapipe_reliability, left_knee_reliability = check_camera_view_from_mediapipe_reliability(landmarks)
+                camera_view_ok_flg_from_mediapipe_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_reliability(landmarks)
 
-                if camera_view_ok_flg_from_distance == True and camera_view_ok_flg_from_mediapipe_reliability == True:
-                    camera_view_ok_flg == True
+                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_reliability == True):
+                    camera_view_ok_flg = True
                 else:
-                    camera_view_ok_flg == False
+                    camera_view_ok_flg = False
 
                 if camera_view_ok_flg == True:
                     draw_label(frame, "camera_view_OK", f"camera_view_OK:{body_distance:.2f}")
