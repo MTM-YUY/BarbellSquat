@@ -51,7 +51,7 @@ def process_video(mode, file_path, output_dir=None):
         show_video(output_path)
         enable_download(output_path)
     else:
-        print(f"処理後の動画が見つかりません: {output_path}")
+        print(f"処理終了")
 
 # ===== 「両方」モード用：出力フォルダ名の決定とreviewの統合 =====
 

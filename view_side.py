@@ -17,10 +17,10 @@ POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
 TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
 CAMERA_VIEW_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値
-CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.003 # 画角が正常か否かを判断する閾値で，MediaPipeの信頼度(左肩)
+CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値で，MediaPipeの信頼度(左肩)
 
 # フラグ
-camera_view_ok_flg = None
+camera_view_ok_flg = False
 
 print("CUDA available:", torch.cuda.is_available())
 
@@ -82,8 +82,8 @@ HUD_LAYOUT = {
     "torso_too_upright": (30, 180, COLOR_RED),      # 体幹が直立しすぎ
     "torso_too_forward": (30, 180, COLOR_RED),      # 体幹が前傾しすぎ
     "torso_ok":          (30, 180, COLOR_GREEN),    # 体幹おｋ
-    "camera_view_NG":    (100, 30, COLOR_RED),      # カメラの画角NG
-    "camera_view_OK":    (100, 30, COLOR_GREEN),    # カメラの画角OK
+    "camera_view_NG":    (150, 30, COLOR_RED),      # カメラの画角NG
+    "camera_view_OK":    (150, 30, COLOR_GREEN),    # カメラの画角OK
 }
 
 
@@ -311,7 +311,6 @@ def judge_torso_tilt(hip_point: Points, shoulder_point: Points) -> tuple[str, in
 
     # ラジアンから度に変換
     angle_deg = int(180 - math.degrees(angle_rad))
-    print(f"angle = {angle_deg}")
 
     """35度未満は直立すぎ、45度以上は前傾すぎ"""
     if TORSO_TOO_FORWARD < angle_deg:
@@ -418,6 +417,7 @@ def main():
             draw_label(frame, "status", status)
 
         # ステータス履歴更新
+        before_before_status = before_status
         before_status = recent_status
         recent_status = status
 
@@ -442,30 +442,28 @@ def main():
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
                 camera_view_ok_flg_from_mediapipe_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_reliability(landmarks)
 
+                global camera_view_ok_flg
                 if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_reliability == True):
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
 
-                if camera_view_ok_flg == True:
-                    draw_label(frame, "camera_view_OK", f"camera_view_OK:{body_distance:.2f}")
-                elif camera_view_ok_flg == False:
-                    draw_label(frame, "camera_view_NG", f"camera_view_NG:{body_distance:.2f}")
+            if camera_view_ok_flg == True:
+                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_shoulder_reliability:.2f})")
+            elif camera_view_ok_flg == False:
+                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{left_shoulder_reliability:.2f})")
 
             # 体感前傾角度の良否判定
-            if status == "stay" and before_status == "down":
+            if status == "stay" and before_status == "down" and before_before_status == "down":
                 torso_tilt_flg, torso_tilt = judge_torso_tilt(pt["right_hip"], pt["right_shoulder"])
                 if torso_tilt_flg == "too_upright":
-                    print("upright")
                     rep_state.review_flg["torso_too_upright"] = True
                     draw_label(frame, "torso_too_upright", f"torso_too_upright:{torso_tilt}")
                 elif torso_tilt_flg == "too_forward":
-                    print("forward")
                     rep_state.review_flg["torso_too_forward"] = True
                     draw_label(frame, "torso_too_forward", f"torso_too_forward:{torso_tilt}")
                 else:
                     draw_label(frame, "torso_ok", f"torso_ok:{torso_tilt}")
-                    print("none")
 
 
             # 角度計算
@@ -558,6 +556,23 @@ def main():
         cv2.imshow("view side", frame)
         frame_count += 1
 
+
+        # 顔の向きが下向きすぎと前向きすぎの両方判定された場合の処理　出力コメントを変更
+        if rep_state.review_flg["head_not_tilt"] and rep_state.review_flg["head_too_tilt"]:
+            rep_state.review_flg["head_not_tilt"] = False
+            rep_state.review_flg["head_too_tilt"] = False
+            rep_state.review_flg["head_unstable"] = True
+
+        # レビューコメント書き込み
+        if camera_view_ok_flg == True:
+            lines = [
+                REVIEW_COMMENTS[key]
+                for key in rep_state.review_flg
+                if rep_state.review_flg[key]
+            ]
+            with open(save_review_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q") or key == 27:  # 27 = ESCキー
             break
@@ -566,20 +581,20 @@ def main():
     writer.join()
     writer.shutdown()
 
-    # 顔の向きが下向きすぎと前向きすぎの両方判定された場合の処理　出力コメントを変更
-    if rep_state.review_flg["head_not_tilt"] and rep_state.review_flg["head_too_tilt"]:
-        rep_state.review_flg["head_not_tilt"] = False
-        rep_state.review_flg["head_too_tilt"] = False
-        rep_state.review_flg["head_unstable"] = True
+    # # 顔の向きが下向きすぎと前向きすぎの両方判定された場合の処理　出力コメントを変更
+    # if rep_state.review_flg["head_not_tilt"] and rep_state.review_flg["head_too_tilt"]:
+    #     rep_state.review_flg["head_not_tilt"] = False
+    #     rep_state.review_flg["head_too_tilt"] = False
+    #     rep_state.review_flg["head_unstable"] = True
 
-    # レビューコメント書き込み
-    lines = [
-        REVIEW_COMMENTS[key]
-        for key in rep_state.review_flg
-        if rep_state.review_flg[key]
-    ]
-    with open(save_review_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    # # レビューコメント書き込み
+    # lines = [
+    #     REVIEW_COMMENTS[key]
+    #     for key in rep_state.review_flg
+    #     if rep_state.review_flg[key]
+    # ]
+    # with open(save_review_path, "w", encoding="utf-8") as f:
+    #     f.write("\n".join(lines))
 
     # 後処理
     pose.close()
