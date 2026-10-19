@@ -28,18 +28,44 @@ print("CUDA available:", torch.cuda.is_available())
 LANDMARKS_INDICES = [5, 10, 11, 12, 23, 24, 25, 26, 27, 30, 32]
 
 POSE_LANDMARKS = {
-    "right_eye": 5,
-    "right_mouth": 10,
-    "right_shoulder": 12,
-    "right_elbow": 14,
-    "right_hip": 24,
-    "right_knee": 26,
-    "right_heel": 30,
-    "right_foot_index": 32,
-    "left_shoulder": 11,
-    "left_elbow": 13,
-    "left_hip": 23,
-    "left_knee": 25,
+    "nose": 0,              # 鼻
+
+    # 左側のキーポイント
+    "left_eye_inner": 1,    # 左目（内側）
+    "left_eye": 2,          # 左目
+    "left_eye_outer": 3,    # 左目（外側）
+    "left_ear": 7,          # 左耳
+    "left_mouth": 9,        # 口（左側）
+    "left_shoulder": 11,    # 左肩
+    "left_elbow": 13,       # 左肘
+    "left_wrist": 15,       # 左手首
+    "left_pinky": 17,       # 左手の小指
+    "left_index": 19,       # 左手の人差し指
+    "left_thumb": 21,       # 左手の親指
+    "left_hip": 23,         # 左股関節
+    "left_knee": 25,        # 左膝
+    "left_ankle": 27,       # 左足首
+    "left_heel": 29,        # 左かかと
+    "left_foot_index": 31,  # 左足の人差し指（つま先）
+
+    # 右側のキーポイント
+    "right_eye_inner": 4,   # 右目（内側）
+    "right_eye": 5,         # 右目
+    "right_eye_outer": 6,   # 右目（外側）
+    "right_ear": 8,         # 右耳
+    "right_mouth": 10,      # 口（右側）
+    "right_shoulder": 12,   # 右肩
+    "right_elbow": 14,      # 右肘
+    "right_wrist": 16,      # 右手首
+    "right_pinky": 18,      # 右手の小指
+    "right_index": 20,      # 右手の人差し指
+    "right_thumb": 22,      # 右手の親指
+    "right_hip": 24,        # 右股関節
+    "right_knee": 26,       # 右膝
+    "right_ankle": 28,      # 右足首
+    "right_heel": 30,       # 右かかと
+    "right_foot_index": 32, # 右足の人差し指（つま先）
+
 }
 
 RIGHT_CONNECTIONS = [
@@ -250,14 +276,15 @@ def check_camera_view_from_distance(left_shoulder: Points, right_shoulder: Point
         return False, body_distance # 画角NG
 
 
-def check_camera_view_from_mediapipe_reliability(landmarks) -> tuple[bool, float]:
-    left_shoulder_reliability = landmarks[POSE_LANDMARKS["left_elbow"]].visibility
-    print(f"left_elbow_visibility:{left_shoulder_reliability}")
+def check_camera_view_from_mediapipe_left_elbow_reliability(landmarks) -> tuple[bool, float]:
+    left_elbow_reliability = landmarks[POSE_LANDMARKS["left_elbow"]].visibility
+    print(f"left_elbow_visibility:{left_elbow_reliability}")
     
-    if left_shoulder_reliability < CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD:
-        return True, left_shoulder_reliability # 画角OK
+    if left_elbow_reliability < CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD:
+        return True, left_elbow_reliability # 画角OK
     else:
-        return False, left_shoulder_reliability # 画角NG
+        return False, left_elbow_reliability # 画角NG
+
 
 
 def determine_status(hip_deque: deque, threshold: int) -> str:
@@ -440,10 +467,10 @@ def main():
             # カメラの画角チェック
             if rep_state.frame_count == 1:
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
-                camera_view_ok_flg_from_mediapipe_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_reliability(landmarks)
+                camera_view_ok_flg_from_mediapipe_left_elbow_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_left_elbow_reliability(landmarks)
 
                 global camera_view_ok_flg
-                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_reliability == True):
+                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_left_elbow_reliability == True):
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
@@ -580,21 +607,6 @@ def main():
     # 非同期書き込み完了待ち
     writer.join()
     writer.shutdown()
-
-    # # 顔の向きが下向きすぎと前向きすぎの両方判定された場合の処理　出力コメントを変更
-    # if rep_state.review_flg["head_not_tilt"] and rep_state.review_flg["head_too_tilt"]:
-    #     rep_state.review_flg["head_not_tilt"] = False
-    #     rep_state.review_flg["head_too_tilt"] = False
-    #     rep_state.review_flg["head_unstable"] = True
-
-    # # レビューコメント書き込み
-    # lines = [
-    #     REVIEW_COMMENTS[key]
-    #     for key in rep_state.review_flg
-    #     if rep_state.review_flg[key]
-    # ]
-    # with open(save_review_path, "w", encoding="utf-8") as f:
-    #     f.write("\n".join(lines))
 
     # 後処理
     pose.close()
