@@ -16,8 +16,9 @@ HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告する�
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
 TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
-CAMERA_VIEW_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値
-CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値で，MediaPipeの信頼度(左肩)
+CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
+CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左肩)
+CHECK_CAMERA_VIEW_TILT_THRESHOLD = 0 # 画角が正常か否かを判断する閾値：肩、手頸の傾きの絶対値
 
 # フラグ
 camera_view_ok_flg = False
@@ -25,7 +26,7 @@ camera_view_ok_flg = False
 print("CUDA available:", torch.cuda.is_available())
 
 # 右半身のランドマークインデックス
-LANDMARKS_INDICES = [5, 10, 11, 12, 23, 24, 25, 26, 27, 30, 32]
+LANDMARKS_INDICES = [5, 10, 11, 12, 16, 23, 24, 25, 26, 27, 30, 32]
 
 POSE_LANDMARKS = {
     "nose": 0,              # 鼻
@@ -270,7 +271,7 @@ def check_camera_view_from_distance(left_shoulder: Points, right_shoulder: Point
 
     body_distance = shoulder_distance + hip_distance + knee_distance
     
-    if body_distance < CAMERA_VIEW_THRESHOLD:
+    if body_distance < CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD:
         return True, body_distance # 画角OK
     else:
         return False, body_distance # 画角NG
@@ -284,6 +285,19 @@ def check_camera_view_from_mediapipe_left_elbow_reliability(landmarks) -> tuple[
         return True, left_elbow_reliability # 画角OK
     else:
         return False, left_elbow_reliability # 画角NG
+
+
+def check_camera_view_form_right_shoulder_wrist(right_shoulder: Points, right_wrist: Points) -> tuple[bool, float]:
+    right_shoulder_points = (right_shoulder.x, right_shoulder.y)
+    right_wrist_points = (right_wrist.x, right_wrist.y)
+
+    shoulder_wrist_tilt = (right_shoulder_points[1] - right_wrist_points[1]) / (right_shoulder_points[0] - right_wrist_points[0] + 1e-9)
+    print(f"tilt = {shoulder_wrist_tilt}")
+
+    if CHECK_CAMERA_VIEW_TILT_THRESHOLD < shoulder_wrist_tilt:
+        return True, shoulder_wrist_tilt
+    else:
+        return False, shoulder_wrist_tilt
 
 
 
@@ -467,18 +481,19 @@ def main():
             # カメラの画角チェック
             if rep_state.frame_count == 1:
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
-                camera_view_ok_flg_from_mediapipe_left_elbow_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_left_elbow_reliability(landmarks)
+                # camera_view_ok_flg_from_mediapipe_left_elbow_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_left_elbow_reliability(landmarks)
+                camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
 
                 global camera_view_ok_flg
-                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_left_elbow_reliability == True):
+                if (camera_view_ok_flg_from_distance == True) and (camera_view_form_right_shoulder_wrist == True):
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
 
             if camera_view_ok_flg == True:
-                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_shoulder_reliability:.2f})")
+                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{tilt:.2f})")
             elif camera_view_ok_flg == False:
-                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{left_shoulder_reliability:.2f})")
+                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{tilt:.2f})")
 
             # 体感前傾角度の良否判定
             if status == "stay" and before_status == "down" and before_before_status == "down":
