@@ -109,8 +109,8 @@ HUD_LAYOUT = {
     "torso_too_upright": (30, 180, COLOR_RED),      # 体幹が直立しすぎ
     "torso_too_forward": (30, 180, COLOR_RED),      # 体幹が前傾しすぎ
     "torso_ok":          (30, 180, COLOR_GREEN),    # 体幹おｋ
-    "camera_view_NG":    (150, 30, COLOR_RED),      # カメラの画角NG
-    "camera_view_OK":    (150, 30, COLOR_GREEN),    # カメラの画角OK
+    "camera_view_NG":    (120, 30, COLOR_RED),      # カメラの画角NG
+    "camera_view_OK":    (120, 30, COLOR_GREEN),    # カメラの画角OK
 }
 
 
@@ -481,19 +481,19 @@ def main():
             # カメラの画角チェック
             if rep_state.frame_count == 1:
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
-                # camera_view_ok_flg_from_mediapipe_left_elbow_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_left_elbow_reliability(landmarks)
-                camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
+                camera_view_ok_flg_from_mediapipe_left_elbow_reliability, left_shoulder_reliability = check_camera_view_from_mediapipe_left_elbow_reliability(landmarks)
+                # camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
 
                 global camera_view_ok_flg
-                if (camera_view_ok_flg_from_distance == True) and (camera_view_form_right_shoulder_wrist == True):
+                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_left_elbow_reliability == True):
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
 
             if camera_view_ok_flg == True:
-                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{tilt:.2f})")
+                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_shoulder_reliability:.4f})")
             elif camera_view_ok_flg == False:
-                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{tilt:.2f})")
+                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{left_shoulder_reliability:.4f})")
 
             # 体感前傾角度の良否判定
             if status == "stay" and before_status == "down" and before_before_status == "down":
