@@ -18,7 +18,7 @@ TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
 CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 70 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
 CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左肩)
-CHECK_CAMERA_VIEW_TILT_THRESHOLD = 0 # 画角が正常か否かを判断する閾値：肩、手頸の傾きの絶対値
+CHECK_CAMERA_VIEW_TILT_THRESHOLD = -0.4 # 画角が正常か否かを判断する閾値：肩、手頸の傾きの絶対値
 
 # フラグ
 camera_view_ok_flg = False
