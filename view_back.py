@@ -109,9 +109,10 @@ HUD_LAYOUT = {
     "recording":               (30, 90,  COLOR_MAGENTA),  # rep記録中フラグ("now")
     "barbell_tilt":            (30, 120, COLOR_YELLOW),   # バーベル傾き警告
     "knee_valgus_result":      (30, 180, COLOR_RED),      # rep終了後のニーイン判定結果
-    "knee_z":                  (200, 60,  COLOR_GREEN),   # 右膝 z座標
-    "heel_z":                  (200, 90,  COLOR_GREEN),   # 右かかと z座標
-    "foot_index_z":            (200, 120, COLOR_GREEN),   # 右つま先 z座標
+    "shoulder_tilt":           (350, 60,  COLOR_GREEN),   # 肩の傾き
+    "hip_tilt":                (350, 90,  COLOR_GREEN),   # 腰の傾き
+    "knee_tilt":               (350, 120, COLOR_GREEN),   # 膝の傾き
+    "heel_tilt":               (350, 150, COLOR_GREEN),   # 踵の傾き
     "stance_width_ok":         (30, 210, COLOR_GREEN), # 足幅ok
     "stance_width_too_wide":   (30, 210, COLOR_RED),    # 足幅開きすぎ
     "stance_width_too_narrow": (30, 210, COLOR_RED),  # 足幅狭すぎ
@@ -263,6 +264,13 @@ def determine_status(hip_deque: deque, threshold: int) -> str:
     return "stay"
 
 
+def get_tilt_from_two_points(point1: Points, point2: Points) -> float:
+    rad_tilt = math.atan((point1.y - point2.y) / (point1.x - point2.x))
+    deg_tilt = round(abs(math.degrees(rad_tilt)), 2) # 小数第二位で丸めた傾き
+
+    return deg_tilt
+
+
 def ensure_rep_dirs(base: str, mov_name: str, rep_count: int) -> dict:
     """repごとの出力ディレクトリを一度だけ作成し、パスを返す"""
     dirs = {
@@ -274,24 +282,22 @@ def ensure_rep_dirs(base: str, mov_name: str, rep_count: int) -> dict:
     return dirs
 
 
-def detect_barbell_tilt(left_wrist: Points, right_wrist: Points) -> str:
+def detect_barbell_tilt(left_wrist: Points, right_wrist: Points) -> tuple[str,float]:
     """両手首の傾きをバーベルの傾きとして、3～5°なら注意、5°以上なら警告を返す"""
     rad_barbell_tilt = math.atan2(
         (right_wrist.y - left_wrist.y),
         (right_wrist.x - left_wrist.x)
     )
-    deg_barbell_tilt = abs(math.degrees(rad_barbell_tilt))
+    deg_barbell_tilt = round(abs(math.degrees(rad_barbell_tilt)),2)
 
 
-    # print(f"def:{deg_barbell_tilt}")
     if deg_barbell_tilt < CAUTION_THRESHOLD:
-        comment = "none"
+        barbell_tilt_class = "true"
     elif deg_barbell_tilt < WARNING_THRESHOLD:
-        comment = "caution"
+        barbell_tilt_class = "caution"
     else:
-        comment = "warning"
-    # print(f"return:{comment}")
-    return comment
+        barbell_tilt_class = "warning"
+    return barbell_tilt_class, deg_barbell_tilt
 
 
 def judge_stance_width(left_elbow: Points, left_shoulder: Points, left_hip: Points, left_heel: Points, right_elbow: Points, right_shoulder: Points, right_hip: Points, right_heel: Points) -> str:
@@ -436,14 +442,24 @@ def main():
                 between_rep_active = False
 
         draw_label(frame, "reps", f"reps:{rep_state.count}")
-        # draw_label(frame, "knee_z", f"right_knee_z:{(pt['right_knee'].z):.2f}")
-        # draw_label(frame, "heel_z", f"right_heel_z:{(pt['right_heel'].z):.2f}")
-        # draw_label(frame, "foot_index_z", f"right_foot_index_z:{(pt['right_foot_index'].z):.2f}")
 
         # rep中の処理
         if rep_state.is_recording:
             rep_state.tick()
             draw_label(frame, "recording", "now")
+
+            shoulder_tilt = get_tilt_from_two_points(pt["left_shoulder"], pt["right_shoulder"])
+            print(f"shoulder_tilt:{shoulder_tilt}")
+            draw_label(frame, "shoulder_tilt", f"shoulder_tilt:{shoulder_tilt}")
+            hip_tilt = get_tilt_from_two_points(pt["left_hip"], pt["right_hip"])
+            print(f"hip_tilt:{hip_tilt}")
+            draw_label(frame, "hip_tilt", f"hip_tilt:{hip_tilt}")
+            knee_tilt = get_tilt_from_two_points(pt["left_knee"], pt["right_knee"])
+            print(f"knee_tilt:{knee_tilt}")
+            draw_label(frame, "knee_tilt", f"knee_tilt:{knee_tilt}")
+            heel_tilt = get_tilt_from_two_points(pt["left_heel"], pt["right_heel"])
+            print(f"heel_tilt:{heel_tilt}")
+            draw_label(frame, "heel_tilt", f"heel_tilt:{heel_tilt}")
 
             # 始めの足幅の良否判定
             if rep_state.frame_count == 1:
@@ -456,12 +472,15 @@ def main():
                 else:
                     draw_label(frame, "stance_width_ok", "stance_width_ok")
 
-            if detect_barbell_tilt(pt["left_wrist"], pt["right_wrist"]) == "caution":
+            barbell_tilt_class, barbell_tilt = detect_barbell_tilt(pt["left_wrist"], pt["right_wrist"])
+            if barbell_tilt_class == "true":
+                draw_label(frame, "barbell_tilt", f"barbell_not_tilt:{barbell_tilt}", color=COLOR_GREEN)
+            elif barbell_tilt_class == "caution":
                 rep_state.review_flg["caution_barbell_tilt"] = True
-                draw_label(frame, "barbell_tilt", "slightly_tilt")
-            elif detect_barbell_tilt(pt["left_wrist"], pt["right_wrist"]) == "warning":
+                draw_label(frame, "barbell_tilt", f"slightly_tilt:{barbell_tilt}", color=COLOR_YELLOW)
+            elif barbell_tilt_class == "warning":
                 rep_state.review_flg["warning_barbell_tilt"] = True
-                draw_label(frame, "barbell_tilt", "heavily_tilt", color=COLOR_RED)
+                draw_label(frame, "barbell_tilt", f"heavily_tilt:{barbell_tilt}", color=COLOR_RED)
 
             # 6部位 × xyz の18列をバッファに追記
             rep_state.csv_buf.append_leg(
