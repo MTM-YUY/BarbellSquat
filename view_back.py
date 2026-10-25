@@ -21,6 +21,12 @@ STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
 CAUTION_THRESHOLD = 3 # バーベルの傾き注意する閾値
 WARNING_THRESHOLD = 5 # バーベルの傾き警告する閾値
+CHECK_CAMERA_VIEW_TILT_THRESHOLD = 7.5 # 画角の異常を判定する際の閾値：肩・腰・膝・踵の傾きの合計
+
+
+# フラグ
+camera_view_ok_flg = False
+
 
 """ニーイン推論モデル 指定"""
 ####################
@@ -271,6 +277,28 @@ def get_tilt_from_two_points(point1: Points, point2: Points) -> float:
     return deg_tilt
 
 
+def check_camera_view(frame, landmarks) -> bool:
+    """肩・腰・膝・踵の傾きの計算及び描画 これらの情報から画角の異常を判定"""
+    shoulder_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_shoulder"]], landmarks[POSE_LANDMARKS["right_shoulder"]])
+    draw_label(frame, "shoulder_tilt", f"shoulder_tilt:{shoulder_tilt}")
+    
+    hip_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_hip"]], landmarks[POSE_LANDMARKS["right_hip"]])
+    draw_label(frame, "hip_tilt", f"hip_tilt:{hip_tilt}")
+    
+    knee_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_knee"]], landmarks[POSE_LANDMARKS["right_knee"]])
+    draw_label(frame, "knee_tilt", f"knee_tilt:{knee_tilt}")
+    
+    heel_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_heel"]], landmarks[POSE_LANDMARKS["right_heel"]])
+    draw_label(frame, "heel_tilt", f"heel_tilt:{heel_tilt}")
+    
+    sum_tilt = (shoulder_tilt + hip_tilt + knee_tilt + heel_tilt)
+    
+    if sum_tilt < CHECK_CAMERA_VIEW_TILT_THRESHOLD:
+        return True
+    else:
+        return False
+
+
 def ensure_rep_dirs(base: str, mov_name: str, rep_count: int) -> dict:
     """repごとの出力ディレクトリを一度だけ作成し、パスを返す"""
     dirs = {
@@ -301,7 +329,7 @@ def detect_barbell_tilt(left_wrist: Points, right_wrist: Points) -> tuple[str,fl
 
 
 def judge_stance_width(left_elbow: Points, left_shoulder: Points, left_hip: Points, left_heel: Points, right_elbow: Points, right_shoulder: Points, right_hip: Points, right_heel: Points) -> str:
-    """肩・腰・かかとの座標関係から足の開き具合の良否判定　かかとが肩より外側にあるまたはかかとが腰より内側にあれば警告"""
+    """肩・腰・かかとの座標関係から足の開き具合の良否判定 かかとが肩より外側にあるまたはかかとが腰より内側にあれば警告"""
     left_shoulder_width = int((left_shoulder.x + left_elbow.x) / 2)
     right_shoulder_width = int((right_shoulder.x + right_elbow.x) / 2)
     left_hip_width = int((left_shoulder.x + left_hip.x) / 2)
@@ -448,21 +476,12 @@ def main():
             rep_state.tick()
             draw_label(frame, "recording", "now")
 
-            shoulder_tilt = get_tilt_from_two_points(pt["left_shoulder"], pt["right_shoulder"])
-            print(f"shoulder_tilt:{shoulder_tilt}")
-            draw_label(frame, "shoulder_tilt", f"shoulder_tilt:{shoulder_tilt}")
-            hip_tilt = get_tilt_from_two_points(pt["left_hip"], pt["right_hip"])
-            print(f"hip_tilt:{hip_tilt}")
-            draw_label(frame, "hip_tilt", f"hip_tilt:{hip_tilt}")
-            knee_tilt = get_tilt_from_two_points(pt["left_knee"], pt["right_knee"])
-            print(f"knee_tilt:{knee_tilt}")
-            draw_label(frame, "knee_tilt", f"knee_tilt:{knee_tilt}")
-            heel_tilt = get_tilt_from_two_points(pt["left_heel"], pt["right_heel"])
-            print(f"heel_tilt:{heel_tilt}")
-            draw_label(frame, "heel_tilt", f"heel_tilt:{heel_tilt}")
-
             # 始めの足幅の良否判定
             if rep_state.frame_count == 1:
+                """画角の異常判定"""
+                camera_view_ok_flg = check_camera_view(frame, landmarks)
+                
+                """足幅の良否判定"""
                 if judge_stance_width(pt["left_elbow"], pt["left_shoulder"], pt["left_hip"], pt["left_heel"], pt["right_elbow"], pt["right_shoulder"], pt["right_hip"], pt["right_heel"]) == "too_wide":
                     rep_state.review_flg["stance_width_too_wide"] = True
                     draw_label(frame, "stance_width_too_wide", "stance_width_too_wide")
