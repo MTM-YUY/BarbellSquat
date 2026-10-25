@@ -21,7 +21,7 @@ STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
 CAUTION_THRESHOLD = 3 # バーベルの傾き注意する閾値
 WARNING_THRESHOLD = 5 # バーベルの傾き警告する閾値
-CHECK_CAMERA_VIEW_TILT_THRESHOLD = 7.5 # 画角の異常を判定する際の閾値：肩・腰・膝・踵の傾きの合計
+CHECK_CAMERA_VIEW_TILT_THRESHOLD = 4.5 # 画角の異常を判定する際の閾値：肩・腰・膝・踵の傾きの合計
 
 
 # フラグ
@@ -108,6 +108,7 @@ COLOR_GREEN = [100, 255, 100]
 COLOR_MAGENTA = [255, 0, 255]
 COLOR_YELLOW = [0, 255, 255]
 COLOR_RED = [0, 0, 255]
+COLOR_CYAN = [255, 255, 0]
 
 HUD_LAYOUT = {
     "status":                  (30, 30,  COLOR_GREEN),    # down/up/stay ステータス
@@ -119,9 +120,12 @@ HUD_LAYOUT = {
     "hip_tilt":                (350, 90,  COLOR_GREEN),   # 腰の傾き
     "knee_tilt":               (350, 120, COLOR_GREEN),   # 膝の傾き
     "heel_tilt":               (350, 150, COLOR_GREEN),   # 踵の傾き
-    "stance_width_ok":         (30, 210, COLOR_GREEN), # 足幅ok
-    "stance_width_too_wide":   (30, 210, COLOR_RED),    # 足幅開きすぎ
-    "stance_width_too_narrow": (30, 210, COLOR_RED),  # 足幅狭すぎ
+    "sum_tilt":                (350, 180, COLOR_GREEN),   # 肩・腰・膝・踵の傾きの合計
+    "stance_width_ok":         (30, 210, COLOR_GREEN),    # 足幅ok
+    "stance_width_too_wide":   (30, 210, COLOR_RED),      # 足幅開きすぎ
+    "stance_width_too_narrow": (30, 210, COLOR_RED),      # 足幅狭すぎ
+    "camera_view_NG":          (120, 30, COLOR_RED),      # カメラの画角NG
+    "camera_view_OK":          (120, 30, COLOR_GREEN),    # カメラの画角OK
 }
 
 
@@ -292,6 +296,7 @@ def check_camera_view(frame, landmarks) -> bool:
     draw_label(frame, "heel_tilt", f"heel_tilt:{heel_tilt}")
     
     sum_tilt = (shoulder_tilt + hip_tilt + knee_tilt + heel_tilt)
+    draw_label(frame, "sum_tilt", f"sum_tilt:{round(sum_tilt, 2)}")
     
     if sum_tilt < CHECK_CAMERA_VIEW_TILT_THRESHOLD:
         return True
@@ -479,7 +484,12 @@ def main():
             # 始めの足幅の良否判定
             if rep_state.frame_count == 1:
                 """画角の異常判定"""
+                global camera_view_ok_flg
                 camera_view_ok_flg = check_camera_view(frame, landmarks)
+                if camera_view_ok_flg == True:
+                    draw_label(frame, "camera_view_OK", f"camera_view:OK")
+                else:
+                    draw_label(frame, "camera_view_NG", f"camera_view:NG")
                 
                 """足幅の良否判定"""
                 if judge_stance_width(pt["left_elbow"], pt["left_shoulder"], pt["left_hip"], pt["left_heel"], pt["right_elbow"], pt["right_shoulder"], pt["right_hip"], pt["right_heel"]) == "too_wide":
@@ -558,6 +568,21 @@ def main():
 
         cv2.imshow("view back", frame)
         frame_count += 1
+        
+        # 重要な警告のみを修正コメントに出力
+        if rep_state.review_flg["warning_barbell_tilt"]:
+            rep_state.review_flg["caution_barbell_tilt"] = False
+        
+        if camera_view_ok_flg == True:
+            # 画角が正常な場合にのみレビューコメント書き込み
+            lines = [
+                REVIEW_COMMENTS[key]
+                for key in rep_state.review_flg
+                if rep_state.review_flg[key]
+            ]
+            with open(save_review_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q") or key == 27:  # 27 = ESCキー
@@ -567,18 +592,6 @@ def main():
     writer.join()
     writer.shutdown()
 
-    # 重要な警告のみを修正コメントに出力
-    if rep_state.review_flg["warning_barbell_tilt"]:
-        rep_state.review_flg["caution_barbell_tilt"] = False
-
-    # レビューコメント書き込み
-    lines = [
-        REVIEW_COMMENTS[key]
-        for key in rep_state.review_flg
-        if rep_state.review_flg[key]
-    ]
-    with open(save_review_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
 
     # rep毎のニーイン推論結果をCSVに書き出す
     with open(save_knee_valgus_csv_path, "w", newline="", encoding="utf-8") as f:
