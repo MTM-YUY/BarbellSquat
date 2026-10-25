@@ -15,7 +15,7 @@ import torch.nn.functional as F
 # ============================================================
 # 定数
 # ============================================================
-ROUND_NUM = 20
+ROUND_NUM = 21
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
@@ -40,20 +40,44 @@ print("CUDA available:", torch.cuda.is_available())
 BODY_INDICES = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 29, 30, 31, 32]
 
 POSE_LANDMARKS = {
-    "right_shoulder": 12,
-    "right_elbow": 14,
-    "right_wrist": 16,
-    "right_hip": 24,
-    "right_knee": 26,
-    "right_heel": 30,
-    "right_foot_index": 32,
-    "left_shoulder": 11,
-    "left_elbow": 13,
-    "left_wrist": 15,
-    "left_hip": 23,
-    "left_knee": 25,
-    "left_heel": 29,
-    "left_foot_index": 31,
+    "nose": 0,              # 鼻
+
+    # 左側のキーポイント
+    "left_eye_inner": 1,    # 左目（内側）
+    "left_eye": 2,          # 左目
+    "left_eye_outer": 3,    # 左目（外側）
+    "left_ear": 7,          # 左耳
+    "left_mouth": 9,        # 口（左側）
+    "left_shoulder": 11,    # 左肩
+    "left_elbow": 13,       # 左肘
+    "left_wrist": 15,       # 左手首
+    "left_pinky": 17,       # 左手の小指
+    "left_index": 19,       # 左手の人差し指
+    "left_thumb": 21,       # 左手の親指
+    "left_hip": 23,         # 左股関節
+    "left_knee": 25,        # 左膝
+    "left_ankle": 27,       # 左足首
+    "left_heel": 29,        # 左かかと
+    "left_foot_index": 31,  # 左足の人差し指（つま先）
+
+    # 右側のキーポイント
+    "right_eye_inner": 4,   # 右目（内側）
+    "right_eye": 5,         # 右目
+    "right_eye_outer": 6,   # 右目（外側）
+    "right_ear": 8,         # 右耳
+    "right_mouth": 10,      # 口（右側）
+    "right_shoulder": 12,   # 右肩
+    "right_elbow": 14,      # 右肘
+    "right_wrist": 16,      # 右手首
+    "right_pinky": 18,      # 右手の小指
+    "right_index": 20,      # 右手の人差し指
+    "right_thumb": 22,      # 右手の親指
+    "right_hip": 24,        # 右股関節
+    "right_knee": 26,       # 右膝
+    "right_ankle": 28,      # 右足首
+    "right_heel": 30,       # 右かかと
+    "right_foot_index": 32, # 右足の人差し指（つま先）
+
 }
 
 BODY_CONNECTIONS = [
@@ -269,6 +293,7 @@ def detect_barbell_tilt(left_wrist: Points, right_wrist: Points) -> str:
     # print(f"return:{comment}")
     return comment
 
+
 def judge_stance_width(left_elbow: Points, left_shoulder: Points, left_hip: Points, left_heel: Points, right_elbow: Points, right_shoulder: Points, right_hip: Points, right_heel: Points) -> str:
     """肩・腰・かかとの座標関係から足の開き具合の良否判定　かかとが肩より外側にあるまたはかかとが腰より内側にあれば警告"""
     left_shoulder_width = int((left_shoulder.x + left_elbow.x) / 2)
@@ -283,6 +308,7 @@ def judge_stance_width(left_elbow: Points, left_shoulder: Points, left_hip: Poin
         judge = "none"
     return judge
 
+
 def infer_csv(file_path):
     data = pd.read_csv(file_path, header=None).values.astype(np.float32)
     tensor = torch.tensor(data).T.unsqueeze(0).to(DEVICE)
@@ -292,6 +318,7 @@ def infer_csv(file_path):
         predicted_class = probs.argmax(dim=1).item()
         confidence = probs[0, predicted_class].item()
     return CLASS_NAMES[predicted_class], confidence
+
 
 def inference_knee_valgus(input_csv_path):
     """input_csv_pathにマッチするCSVを推論し、(ファイルパス, 予測クラス, 確率)のリストを返す"""
@@ -409,9 +436,9 @@ def main():
                 between_rep_active = False
 
         draw_label(frame, "reps", f"reps:{rep_state.count}")
-        draw_label(frame, "knee_z", f"right_knee_z:{(pt['right_knee'].z):.2f}")
-        draw_label(frame, "heel_z", f"right_heel_z:{(pt['right_heel'].z):.2f}")
-        draw_label(frame, "foot_index_z", f"right_foot_index_z:{(pt['right_foot_index'].z):.2f}")
+        # draw_label(frame, "knee_z", f"right_knee_z:{(pt['right_knee'].z):.2f}")
+        # draw_label(frame, "heel_z", f"right_heel_z:{(pt['right_heel'].z):.2f}")
+        # draw_label(frame, "foot_index_z", f"right_foot_index_z:{(pt['right_foot_index'].z):.2f}")
 
         # rep中の処理
         if rep_state.is_recording:
@@ -420,7 +447,6 @@ def main():
 
             # 始めの足幅の良否判定
             if rep_state.frame_count == 1:
-                print("はいった")
                 if judge_stance_width(pt["left_elbow"], pt["left_shoulder"], pt["left_hip"], pt["left_heel"], pt["right_elbow"], pt["right_shoulder"], pt["right_hip"], pt["right_heel"]) == "too_wide":
                     rep_state.review_flg["stance_width_too_wide"] = True
                     draw_label(frame, "stance_width_too_wide", "stance_width_too_wide")
