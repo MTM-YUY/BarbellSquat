@@ -21,7 +21,7 @@ STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
 CAUTION_THRESHOLD = 3 # バーベルの傾き注意する閾値
 WARNING_THRESHOLD = 5 # バーベルの傾き警告する閾値
-CHECK_CAMERA_VIEW_TILT_THRESHOLD = 4.5 # 画角の異常を判定する際の閾値：肩・腰・膝・踵の傾きの合計
+CHECK_CAMERA_VIEW_TILT_THRESHOLD = 4.7 # 画角の異常を判定する際の閾値：肩・腰・膝・踵の傾きの合計
 
 
 # フラグ
