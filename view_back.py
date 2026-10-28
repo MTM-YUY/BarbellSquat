@@ -95,8 +95,8 @@ REVIEW_COMMENTS = {
     "knee_valgus": "・臀部を下げる際、膝が内側に入っています。つま先と同じ方向に膝を曲げるようにしましょう\n",
     "caution_barbell_tilt": "・身体が左右でやや傾いています。バーベルが水平となるように注意しましょう\n",
     "warning_barbell_tilt": "・身体が左右で非常に傾いています。危険なのでバーベルが水平となるように意識してください\n",
-    "stance_width_too_wide": "・足幅が広すぎるので、腰幅から肩幅程度に開きましょう\n",
-    "stance_width_too_narrow": "・足幅が狭すぎるので、腰幅から肩幅程度に開きましょう\n",
+    "stance_width_too_wide": "・足幅が広すぎるので、肩幅程度に開きましょう\n",
+    "stance_width_too_narrow": "・足幅が狭すぎるので、肩幅程度に開きましょう\n",
 }
 
 # ------------------------------------------------------------
@@ -274,8 +274,9 @@ def determine_status(hip_deque: deque, threshold: int) -> str:
     return "stay"
 
 
-def get_tilt_from_two_points(point1: Points, point2: Points) -> float:
-    rad_tilt = math.atan((point1.y - point2.y) / (point1.x - point2.x))
+def get_tilt_from_two_points(frame, point1, point2) -> float:
+    h, w = frame.shape[:2]
+    rad_tilt = math.atan((point1.y * h - point2.y * h) / (point1.x * w - point2.x * w))
     deg_tilt = round(abs(math.degrees(rad_tilt)), 2) # 小数第二位で丸めた傾き
 
     return deg_tilt
@@ -283,16 +284,16 @@ def get_tilt_from_two_points(point1: Points, point2: Points) -> float:
 
 def check_camera_view(frame, landmarks) -> bool:
     """肩・腰・膝・踵の傾きの計算及び描画 これらの情報から画角の異常を判定"""
-    shoulder_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_shoulder"]], landmarks[POSE_LANDMARKS["right_shoulder"]])
+    shoulder_tilt = get_tilt_from_two_points(frame , landmarks[POSE_LANDMARKS["left_shoulder"]], landmarks[POSE_LANDMARKS["right_shoulder"]])
     draw_label(frame, "shoulder_tilt", f"shoulder_tilt:{shoulder_tilt}")
     
-    hip_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_hip"]], landmarks[POSE_LANDMARKS["right_hip"]])
+    hip_tilt = get_tilt_from_two_points(frame , landmarks[POSE_LANDMARKS["left_hip"]], landmarks[POSE_LANDMARKS["right_hip"]])
     draw_label(frame, "hip_tilt", f"hip_tilt:{hip_tilt}")
     
-    knee_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_knee"]], landmarks[POSE_LANDMARKS["right_knee"]])
+    knee_tilt = get_tilt_from_two_points(frame , landmarks[POSE_LANDMARKS["left_knee"]], landmarks[POSE_LANDMARKS["right_knee"]])
     draw_label(frame, "knee_tilt", f"knee_tilt:{knee_tilt}")
     
-    heel_tilt = get_tilt_from_two_points(landmarks[POSE_LANDMARKS["left_heel"]], landmarks[POSE_LANDMARKS["right_heel"]])
+    heel_tilt = get_tilt_from_two_points(frame , landmarks[POSE_LANDMARKS["left_heel"]], landmarks[POSE_LANDMARKS["right_heel"]])
     draw_label(frame, "heel_tilt", f"heel_tilt:{heel_tilt}")
     
     sum_tilt = (shoulder_tilt + hip_tilt + knee_tilt + heel_tilt)
