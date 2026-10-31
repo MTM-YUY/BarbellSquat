@@ -15,7 +15,7 @@ import torch.nn.functional as F
 # ============================================================
 # 定数
 # ============================================================
-ROUND_NUM = 21
+ROUND_NUM = 22
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
@@ -547,7 +547,7 @@ def main():
             if infer_results:
                 _, pred, conf = infer_results[0]
                 print(f"[Rep {rep_state.count}] ニーイン推論: {pred} (予測確率: {conf:.4f})")
-                knee_valgus_inference_log.append((rep_state.count, pred, conf))
+                knee_valgus_inference_log.append((rep_state.count, pred, conf, camera_view_ok_flg))
                 if pred == "knee_valgus":
                     rep_state.review_flg["knee_valgus"] = True
                 elif pred == "not_knee_valgus":
@@ -597,9 +597,9 @@ def main():
     # rep毎のニーイン推論結果をCSVに書き出す
     with open(save_knee_valgus_csv_path, "w", newline="", encoding="utf-8") as f:
         writer_csv = csv.writer(f)
-        writer_csv.writerow(["rep", "pred", "conf"])
-        for rep_num, pred, conf in knee_valgus_inference_log:
-            writer_csv.writerow([rep_num, pred, f"{conf:.4f}"])
+        writer_csv.writerow(["rep", "pred", "conf", "camera_view"])
+        for rep_num, pred, conf, view_ok in knee_valgus_inference_log:
+            writer_csv.writerow([rep_num, pred, f"{conf:.4f}", "OK" if view_ok else "NG"])
 
     pose.close()
     cap.release()

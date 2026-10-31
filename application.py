@@ -9,7 +9,7 @@ import sys
 
 # ===== 出力先の設定 =====
 # view_back.py / view_side.py の ROUND_NUM と合わせること（結果は ../result/<ROUND_NUM>/ 以下に出力される）
-ROUND_NUM = 20
+ROUND_NUM = 22
 RESULT_ROOT = os.path.join('..', 'result', str(ROUND_NUM))
 
 # グローバル変数

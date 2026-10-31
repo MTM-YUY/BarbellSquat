@@ -9,7 +9,7 @@ import queue
 import pandas as pd
 
 # 定数
-ROUND_NUM = 20
+ROUND_NUM = 22
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
@@ -380,6 +380,7 @@ def main():
         base_path = f"../result/{ROUND_NUM}/{mov_name}"
     csv_dir = os.path.join(base_path, "csvfile")
     save_review_path = os.path.join(base_path, "review.txt")
+    save_depth_csv_path = os.path.join(base_path, f"{mov_name}_squat_depth_inference.csv")
     for d in [base_path, csv_dir]:
         os.makedirs(d, exist_ok=True)
 
@@ -414,6 +415,7 @@ def main():
     between_rep_frame_count = 0
     csv_point_path = ""
     csv_theta_path = ""
+    depth_inference_log: list = []  # (rep, 深さ判定, 確率, 画角OK/NG)
 
     while True:
         ret, frame = cap.read()
@@ -560,6 +562,7 @@ def main():
 
             # CSV書き込み完了後に推論
             pred, conf = one_dimension_cnn(csv_point_path)
+            depth_inference_log.append((rep_state.count, pred, conf, camera_view_ok_flg))
             if pred == "shallow":
                 rep_state.review_flg["shallow_depth"] = True
                 rep_state.review_flg["deep_depth"] = False
@@ -622,6 +625,13 @@ def main():
     # 非同期書き込み完了待ち
     writer.join()
     writer.shutdown()
+
+    # rep毎のスクワット深さ判定結果と画角判定結果をCSVに書き出す
+    with open(save_depth_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer_csv = csv.writer(f)
+        writer_csv.writerow(["rep", "pred", "conf", "camera_view"])
+        for rep_num, depth_pred, depth_conf, view_ok in depth_inference_log:
+            writer_csv.writerow([rep_num, depth_pred, f"{depth_conf:.4f}", "OK" if view_ok else "NG"])
 
     # 後処理
     pose.close()
