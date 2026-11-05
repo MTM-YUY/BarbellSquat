@@ -9,8 +9,11 @@ import sys
 
 # ===== 出力先の設定 =====
 # view_back.py / view_side.py の ROUND_NUM と合わせること（結果は ../result/<ROUND_NUM>/ 以下に出力される）
-ROUND_NUM = 22
+ROUND_NUM = 23
 RESULT_ROOT = os.path.join('..', 'result', str(ROUND_NUM))
+
+# 対応する動画拡張子
+VIDEO_EXTS = ('.mp4', '.mov', '.avi', '.mkv')
 
 # グローバル変数
 video_label = None   # 動画表示用Label
@@ -21,11 +24,13 @@ current_video_path = None
 
 # 選択モード管理
 selected_mode = None          # 'back' / 'side' / 'both'
-back_file_path = None         # 後視点の選択済みファイルパス
-side_file_path = None         # 横視点の選択済みファイルパス
+back_file_paths = []          # 後視点の選択済みファイルパス（複数）
+side_file_paths = []          # 横視点の選択済みファイルパス（複数）
 start_button = None           # 処理開始ボタン
 frame_container = None        # ドロップエリアのコンテナ
 mode_frame = None             # モード選択フレーム
+status_label = None           # 進捗・警告表示用Label
+status_var = None             # 進捗・警告表示用StringVar
 
 # ===== 動画処理関係 =====
 
@@ -39,135 +44,139 @@ def run_view_script(script_name, video_path, output_dir=None):
 def process_video(mode, file_path, output_dir=None):
     """指定モードで動画を処理し、結果を表示・DLボタン追加"""
     if mode == 'back':
-        run_view_script('view_back.py', file_path, output_dir)
+        rc = run_view_script('view_back.py', file_path, output_dir)
         output_path = '../output_back.mp4'
     elif mode == 'side':
-        run_view_script('view_side.py', file_path, output_dir)
+        rc = run_view_script('view_side.py', file_path, output_dir)
         output_path = '../output_side.mp4'
     else:
-        return
+        return 1
 
     if os.path.exists(output_path):
         show_video(output_path)
         enable_download(output_path)
     else:
         print(f"処理終了")
+    return rc
 
-# ===== 「両方」モード用：出力フォルダ名の決定とreviewの統合 =====
-
-def video_stem(path):
-    return os.path.splitext(os.path.basename(path))[0]
-
-def make_group_name(back_path, side_path):
-    """まとめフォルダ名を決める。
-    両ファイル名の共通部分（先頭から一致する部分）+ "_back_side"
-      例) MTM_back.mp4 / MTM_side.mp4 -> MTM_back_side
-    共通部分が無い場合は "<後視点名>_<横視点名>_back_side"
-    """
-    back_stem, side_stem = video_stem(back_path), video_stem(side_path)
-    prefix = os.path.commonprefix([back_stem, side_stem]).rstrip('_- ')
-    if prefix:
-        return f"{prefix}_back_side"
-    return f"{back_stem}_{side_stem}_back_side"
-
-def make_group_dirs(back_path, side_path):
-    """(まとめフォルダ, 後視点の出力先, 横視点の出力先) を返す"""
-    group_dir = os.path.join(RESULT_ROOT, make_group_name(back_path, side_path))
-    back_name, side_name = video_stem(back_path), video_stem(side_path)
-    if back_name == side_name:
-        # 同名ファイルだと出力が衝突するため、視点名を付けて区別する
-        back_name, side_name = f"{back_name}_back", f"{side_name}_side"
-    return group_dir, os.path.join(group_dir, back_name), os.path.join(group_dir, side_name)
-
-def read_review_lines(review_path):
-    """review.txt の空行を除いた行リストを返す（無ければ None）"""
-    if not os.path.isfile(review_path):
-        return None
-    with open(review_path, encoding='utf-8') as f:
-        return [line.strip() for line in f if line.strip()]
-
-def merge_reviews(group_dir, back_dir, side_dir):
-    """後視点・横視点の review.txt を統合し、group_dir 直下に review.txt として出力する"""
-    back_lines = read_review_lines(os.path.join(back_dir, 'review.txt'))
-    side_lines = read_review_lines(os.path.join(side_dir, 'review.txt'))
-    if back_lines is None or side_lines is None:
-        print("review.txt が見つからない視点があるため、統合reviewを作成できませんでした。")
-        return None
-
-    out = ["【後視点】"] + (back_lines or ["・指摘事項はありません"])
-    out += ["", "【横視点】"] + (side_lines or ["・指摘事項はありません"])
-
-    review_path = os.path.join(group_dir, 'review.txt')
-    with open(review_path, 'w', encoding='utf-8') as f:
-        f.write("\n".join(out) + "\n")
-    print(f"統合reviewを出力しました: {review_path}")
-    return review_path
+def set_status(text):
+    """進捗・警告表示を更新する"""
+    if status_var is not None:
+        status_var.set(text)
+        root.update()
 
 def on_start_processing():
-    """処理開始ボタン押下時の処理"""
-    global selected_mode, back_file_path, side_file_path
+    """処理開始ボタン押下時の処理（選択された動画を順番に1本ずつ処理する）"""
+    global selected_mode, back_file_paths, side_file_paths
 
+    # 処理中の二重実行を防ぐ
+    start_button.config(state='disabled', bg="#cccccc", fg="#666666")
+
+    try:
+        if selected_mode == 'back':
+            total = len(back_file_paths)
+            for i, path in enumerate(back_file_paths, 1):
+                set_status(f"処理中 ({i}/{total}): {os.path.basename(path)}")
+                process_video('back', path)
+
+        elif selected_mode == 'side':
+            total = len(side_file_paths)
+            for i, path in enumerate(side_file_paths, 1):
+                set_status(f"処理中 ({i}/{total}): {os.path.basename(path)}")
+                process_video('side', path)
+
+        elif selected_mode == 'both':
+            # ペアにはせず、選択された動画を1本ずつ処理する（後視点 → 横視点の順）
+            #   出力先は「後視点のみ」「横視点のみ」モードと同じ
+            jobs = [('back', p) for p in back_file_paths] + [('side', p) for p in side_file_paths]
+            total = len(jobs)
+            failed = []
+            for i, (kind, path) in enumerate(jobs, 1):
+                set_status(f"処理中 ({i}/{total}): {os.path.basename(path)}")
+                try:
+                    if process_video(kind, path) != 0:
+                        failed.append(os.path.basename(path))
+                except Exception as e:
+                    # 1本で例外が出ても次へ進む
+                    print(f"{os.path.basename(path)} の処理中にエラー: {e}")
+                    failed.append(os.path.basename(path))
+
+            if failed:
+                set_status(f"完了（失敗あり: {', '.join(failed)}）")
+                return
+
+        set_status("すべての処理が完了しました")
+    finally:
+        update_start_button()
+
+def is_ready():
+    """処理を開始できる状態か"""
     if selected_mode == 'back':
-        process_video('back', back_file_path)
-
-    elif selected_mode == 'side':
-        process_video('side', side_file_path)
-
-    elif selected_mode == 'both':
-        # 1つのフォルダにまとめて出力する
-        #   <group_dir>/<後視点名>/ , <group_dir>/<横視点名>/ , <group_dir>/review.txt
-        group_dir, back_dir, side_dir = make_group_dirs(back_file_path, side_file_path)
-        os.makedirs(group_dir, exist_ok=True)
-
-        # 後視点 → 横視点の順に処理
-        process_video('back', back_file_path, back_dir)
-        process_video('side', side_file_path, side_dir)
-
-        # 両方の review を統合して group_dir 直下に出力
-        merge_reviews(group_dir, back_dir, side_dir)
+        return len(back_file_paths) > 0
+    if selected_mode == 'side':
+        return len(side_file_paths) > 0
+    if selected_mode == 'both':
+        # 本数が違っていても、どちらかに1本以上選ばれていれば開始できる（1本ずつ処理する）
+        return len(back_file_paths) > 0 or len(side_file_paths) > 0
+    return False
 
 def update_start_button():
     """選択状況に応じて処理開始ボタンの有効/無効を切り替え"""
-    global start_button, selected_mode, back_file_path, side_file_path
+    global start_button
 
     if start_button is None:
         return
 
-    ready = False
-    if selected_mode == 'back' and back_file_path:
-        ready = True
-    elif selected_mode == 'side' and side_file_path:
-        ready = True
-    elif selected_mode == 'both' and back_file_path and side_file_path:
-        ready = True
-
-    if ready:
+    if is_ready():
         start_button.config(state='normal', bg="#4CAF50", fg="white")
     else:
         start_button.config(state='disabled', bg="#cccccc", fg="#666666")
 
-def handle_file_selected(file_path, mode, label_var):
-    """ファイルが選択されたときの共通処理（処理はまだ実行しない）"""
-    global back_file_path, side_file_path
+def update_count_warning():
+    """本数が違っていても1本ずつ処理できるため、案内は出さない（呼び出し側との互換用）"""
+    if status_var is not None:
+        status_var.set("")
 
-    if os.path.isfile(file_path) and file_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
-        label_var.set(f"✔ {os.path.basename(file_path)}")
+def make_selection_text(paths):
+    """ドロップエリアに表示する選択結果の文字列"""
+    names = [os.path.basename(p) for p in paths]
+    if len(names) == 1:
+        return f"✔ {names[0]}"
+    shown = names[:3]
+    text = f"✔ {len(names)}件選択\n" + "\n".join(shown)
+    if len(names) > 3:
+        text += "\n…"
+    return text
+
+def handle_files_selected(file_paths, mode, label_var):
+    """ファイルが選択されたときの共通処理（処理はまだ実行しない）"""
+    global back_file_paths, side_file_paths
+
+    valid = [p for p in file_paths
+             if os.path.isfile(p) and p.lower().endswith(VIDEO_EXTS)]
+
+    if valid:
+        # 名前順に並べて、処理順・「両方」モードでのペアリングを安定させる
+        valid.sort(key=lambda p: os.path.basename(p).lower())
+        label_var.set(make_selection_text(valid))
         if mode == 'back':
-            back_file_path = file_path
+            back_file_paths = valid
         elif mode == 'side':
-            side_file_path = file_path
+            side_file_paths = valid
+        update_count_warning()
         update_start_button()
     else:
         label_var.set("※ 対応していないファイルです")
 
 def handle_drop(event, mode, label_var):
-    file_path = event.data.strip('{}')
-    handle_file_selected(file_path, mode, label_var)
+    # 複数ファイルのドロップに対応（スペースを含むパスは {} で囲まれて渡される）
+    file_paths = list(root.tk.splitlist(event.data))
+    handle_files_selected(file_paths, mode, label_var)
 
 def handle_click(mode, label_var):
-    file_path = filedialog.askopenfilename(filetypes=[("Video files", "*.mp4 *.mov *.avi *.mkv")])
-    if file_path:
-        handle_file_selected(file_path, mode, label_var)
+    file_paths = filedialog.askopenfilenames(filetypes=[("Video files", "*.mp4 *.mov *.avi *.mkv")])
+    if file_paths:
+        handle_files_selected(list(file_paths), mode, label_var)
 
 # ===== 動画再生・保存 =====
 
@@ -251,11 +260,12 @@ def create_drop_frame(parent, text, bg_color, mode, col):
 def build_drop_area():
     """選択されたモードに応じてドロップエリアを構築する"""
     global frame_container, selected_mode, start_button
-    global back_file_path, side_file_path
+    global back_file_paths, side_file_paths
+    global status_label, status_var
 
     # リセット
-    back_file_path = None
-    side_file_path = None
+    back_file_paths = []
+    side_file_paths = []
 
     # 既存のコンテナがあれば破棄
     if frame_container:
@@ -265,14 +275,14 @@ def build_drop_area():
     frame_container.pack(pady=10)
 
     if selected_mode == 'back':
-        create_drop_frame(frame_container, "後視点（クリック or ドロップ）", "#d0e0ff", "back", 0)
+        create_drop_frame(frame_container, "後視点（クリック or ドロップ・複数可）", "#d0e0ff", "back", 0)
 
     elif selected_mode == 'side':
-        create_drop_frame(frame_container, "横視点（クリック or ドロップ）", "#ffd0d0", "side", 0)
+        create_drop_frame(frame_container, "横視点（クリック or ドロップ・複数可）", "#ffd0d0", "side", 0)
 
     elif selected_mode == 'both':
-        create_drop_frame(frame_container, "後視点（クリック or ドロップ）", "#d0e0ff", "back", 0)
-        create_drop_frame(frame_container, "横視点（クリック or ドロップ）", "#ffd0d0", "side", 1)
+        create_drop_frame(frame_container, "後視点（クリック or ドロップ・複数可）", "#d0e0ff", "back", 0)
+        create_drop_frame(frame_container, "横視点（クリック or ドロップ・複数可）", "#ffd0d0", "side", 1)
 
     # 処理開始ボタン（初期は無効）
     if start_button:
@@ -282,6 +292,13 @@ def build_drop_area():
                           font=("Arial", 14, "bold"), state='disabled',
                           bg="#cccccc", fg="#666666", padx=20, pady=8)
     start_button.pack(pady=15)
+
+    # 進捗・警告表示
+    if status_label:
+        status_label.destroy()
+    status_var = StringVar(value="")
+    status_label = Label(root, textvariable=status_var, font=("Arial", 12), bg="#f0f0f0", fg="#333333")
+    status_label.pack(pady=5)
 
 def on_mode_selected():
     """ラジオボタン変更時にモードを更新してドロップエリアを再構築"""
@@ -299,7 +316,7 @@ def on_mode_selected():
 
 root = TkinterDnD.Tk()
 root.title("バーベルスクワット評価")
-root.geometry("900x300")
+root.geometry("1000x600")
 root.configure(bg="#f0f0f0")
 
 Label(root, text="バーベルスクワット評価", font=("Arial", 20, "bold"), bg="#f0f0f0").pack(pady=20)

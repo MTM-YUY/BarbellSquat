@@ -15,7 +15,7 @@ import torch.nn.functional as F
 # ============================================================
 # 定数
 # ============================================================
-ROUND_NUM = 22
+ROUND_NUM = 23
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10
 POINT_HIP_WINDOW = 10
@@ -523,7 +523,7 @@ def main():
             )
 
             fn = rep_state.frame_count
-            writer.write(os.path.join(rep_dirs["ori_frame"], f"{fn}.png"), original_frame)
+            # writer.write(os.path.join(rep_dirs["ori_frame"], f"{fn}.png"), original_frame)
             writer.write(os.path.join(rep_dirs["output"],    f"{fn}.png"), frame)
 
         # rep終了検知

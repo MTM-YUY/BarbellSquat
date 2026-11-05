@@ -9,14 +9,14 @@ import queue
 import pandas as pd
 
 # 定数
-ROUND_NUM = 22
+ROUND_NUM = 23
 RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
 TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
-CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 20 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
+CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 25 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
 CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左肩)
 CHECK_CAMERA_VIEW_TILT_THRESHOLD = -0.4 # 画角が正常か否かを判断する閾値：肩、手頸の傾きの絶対値
 
@@ -543,7 +543,7 @@ def main():
 
             # 画像を非同期書き込みキューへ追加
             fn = rep_state.frame_count
-            writer.write(os.path.join(rep_dirs["ori_frame"], f"{fn}.png"), original_frame)
+            # writer.write(os.path.join(rep_dirs["ori_frame"], f"{fn}.png"), original_frame)
             # writer.write(os.path.join(rep_dirs["skeleton"], f"{fn}.png"), frame_skeleton)
             writer.write(os.path.join(rep_dirs["output"], f"{fn}.png"), frame)
 
