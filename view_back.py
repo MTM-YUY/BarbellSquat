@@ -595,11 +595,8 @@ def main():
 
 
     # rep毎のニーイン推論結果をCSVに書き出す
-    with open(save_knee_valgus_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer_csv = csv.writer(f)
-        writer_csv.writerow(["rep", "pred", "conf", "camera_view"])
-        for rep_num, pred, conf, view_ok in knee_valgus_inference_log:
-            writer_csv.writerow([rep_num, pred, f"{conf:.4f}", "OK" if view_ok else "NG"])
+    # （E列以降の2行目に、画角OK/NGの合計数と knee_valgus / not_knee_valgus の合計数も出力する）
+    write_inference_csv(save_knee_valgus_csv_path, knee_valgus_inference_log, ["knee_valgus", "not_knee_valgus"])
 
     pose.close()
     cap.release()

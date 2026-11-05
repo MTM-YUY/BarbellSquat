@@ -1,4 +1,5 @@
 import math
+import csv
 import cv2
 import os
 import pandas as pd
@@ -177,3 +178,38 @@ def draw_landmark_circle(frame, landmarks, landmark_indices, radius):
     x = int(landmark.x * frame.shape[1])
     y = int(landmark.y * frame.shape[0])
     cv2.circle(frame, (x, y), radius, (0, 255, 0), -1)
+
+
+def write_inference_csv(csv_path, inference_log, class_names):
+    """rep毎の推論結果をCSVに書き出す。あわせて、画角OK/NGの合計数と各クラスの合計数を E列以降に出力する。
+
+    inference_log: [(rep番号, 予測クラス, 確率, 画角OKならTrue), ...]
+    class_names  : 合計を出力するクラス名のリスト（出力順）
+
+    出力例（横視点）
+      A列〜D列 : rep, pred, conf, camera_view （1行目が見出し、2行目以降がrep毎の結果）
+      E列以降  : 1行目に見出し、2行目にその合計数
+                 E1=OK, F1=NG, G1=shallow, H1=true, I1=deep
+                 E2=5,  F2=4,  G2=2,       H2=0,    I2=0
+    """
+    ok_count = sum(1 for _, _, _, view_ok in inference_log if view_ok)
+    ng_count = len(inference_log) - ok_count
+
+    summary_header = ["OK", "NG"] + list(class_names)
+    summary_values = [ok_count, ng_count]
+    for name in class_names:
+        summary_values.append(sum(1 for _, pred, _, _ in inference_log if pred == name))
+
+    rows = [["rep", "pred", "conf", "camera_view"] + summary_header]
+    for rep_num, pred, conf, view_ok in inference_log:
+        rows.append([rep_num, pred, f"{conf:.4f}", "OK" if view_ok else "NG"])
+
+    # repが1つも無い場合でも、2行目に合計（すべて0）を出力できるように空行を用意する
+    if len(rows) < 2:
+        rows.append(["", "", "", ""])
+
+    # 2行目のE列以降に合計を追加
+    rows[1] += summary_values
+
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(rows)

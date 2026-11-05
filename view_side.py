@@ -16,7 +16,7 @@ HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告する�
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
 TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
-CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 25 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
+CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 35 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
 CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左肩)
 CHECK_CAMERA_VIEW_TILT_THRESHOLD = -0.4 # 画角が正常か否かを判断する閾値：肩、手頸の傾きの絶対値
 
@@ -619,11 +619,8 @@ def main():
     writer.shutdown()
 
     # rep毎のスクワット深さ判定結果と画角判定結果をCSVに書き出す
-    with open(save_depth_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer_csv = csv.writer(f)
-        writer_csv.writerow(["rep", "pred", "conf", "camera_view"])
-        for rep_num, depth_pred, depth_conf, view_ok in depth_inference_log:
-            writer_csv.writerow([rep_num, depth_pred, f"{depth_conf:.4f}", "OK" if view_ok else "NG"])
+    # （E列以降の2行目に、画角OK/NGの合計数と shallow / true / deep の合計数も出力する）
+    write_inference_csv(save_depth_csv_path, depth_inference_log, ["shallow", "true", "deep"])
 
     # 後処理
     pose.close()
