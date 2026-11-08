@@ -11,20 +11,20 @@ import glob
 import torch
 import torch.nn.functional as F
 import sys
-# OneDCNN / JudgeKneeValgus パッケージが1つ上のディレクトリにあるため、親ディレクトリを import 検索パスに追加
+# EvaluateSquatDepth / JudgeKneeValgus パッケージが1つ上のディレクトリにあるため、親ディレクトリを import 検索パスに追加
 # （import 文には '../' を書けないので sys.path で対応する。append なのでこのディレクトリ内の function.py が優先される）
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-from OneDCNN.OneDCNNmodel import SimpleOneDCNN
+from EvaluateSquatDepth.EvaluateSquatDepthmodel import EvaluateSquatDepthModel
 from JudgeKneeValgus.JudgeKneeValgusModel import JudgeKneeValgusOneDCNN
 
 """view_side スクワットの深さ推論モデル　指定"""
 ####################
-MODEL_PATH = '../OneDCNN/onedcnn_model.pth'
+MODEL_PATH = '../EvaluateSquatDepth/EvaluateSquatDepthModel.pth'
 CLASS_NAMES = ['deep', 'shallow', 'true']
 INPUT_LENGTH = 300
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-model = SimpleOneDCNN(in_channels=6, num_classes=len(CLASS_NAMES), input_length=INPUT_LENGTH)
+model = EvaluateSquatDepthModel(in_channels=6, num_classes=len(CLASS_NAMES), input_length=INPUT_LENGTH)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model.to(DEVICE)
 model.eval()

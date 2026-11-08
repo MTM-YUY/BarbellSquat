@@ -506,19 +506,6 @@ def main():
             theta_hip = calculate_theta(pt["right_knee"], pt["right_hip"], pt["right_shoulder"])
             theta_knee = calculate_theta(pt["right_hip"], pt["right_knee"], pt["right_heel"])
 
-            color = [255, 255, 0]
-            cv2.line(frame,
-                     (pt["right_hip"].x, pt["right_hip"].y),
-                     (pt["right_hip"].x + 70, pt["right_hip"].y), color, 2)
-            draw_text(frame, pt["right_hip"].x + 75, pt["right_hip"].y + 10,
-                      f"theta:{theta_hip:.1f}", color)
-
-            cv2.line(frame,
-                     (pt["right_knee"].x, pt["right_knee"].y),
-                     (pt["right_knee"].x - 50, pt["right_knee"].y + 30), color, 2)
-            draw_text(frame, pt["right_knee"].x - 120, pt["right_knee"].y + 60,
-                      f"theta:{theta_knee:.1f}", color)
-
             # 頭の向き判定
             theta_head_body, face_tilt, body_tilt = compute_head_angle(
                 pt["right_eye"], pt["right_mouth"],
@@ -539,7 +526,7 @@ def main():
                 pt["right_hip"].x, pt["right_hip"].y,
                 pt["right_knee"].x, pt["right_knee"].y,
             )
-            csv_buf.append_theta(theta_hip, theta_knee)
+            # csv_buf.append_theta(theta_hip, theta_knee)
 
             # 画像を非同期書き込みキューへ追加
             fn = rep_state.frame_count
