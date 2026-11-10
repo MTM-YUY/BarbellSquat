@@ -11,13 +11,14 @@ import pandas as pd
 # 定数
 ROUND_NUM = 23
 RESIZE_SCALE = 1.0
-STATUS_THRESHOLD = 10       # 腰のy座標変動量（px）でstatus判定するしきい値
+STATUS_THRESHOLD = 15       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
 TORSO_TOO_UPRIGHT = 35
 TORSO_TOO_FORWARD = 45
-CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD = 35 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
-CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.01 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左肩)
+CHECK_CAMERA_VIEW_KNEE_DISTANCE_THRESHOLD = 40 # 画角が正しいか否かを判断する閾値：膝の距離の合計
+CHECK_CAMERA_VIEW_BODY_DISTANCE_THRESHOLD = 75 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
+CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.03 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左膝)
 CHECK_CAMERA_VIEW_TILT_THRESHOLD = -0.4 # 画角が正常か否かを判断する閾値：肩、手頸の傾きの絶対値
 
 # フラグ
@@ -256,27 +257,47 @@ def get_point(landmarks, key: str, frame_shape) -> Points:
     return Points(int(lm.x * w), int(lm.y * h))
 
 
-def check_camera_view_from_knee_distance(left_knee: Points, right_knee: Points) -> tuple[bool, float]:
-    """両膝の位置関係からカメラ画角の正常異常を判定"""
+def check_camera_view_from_distance(left_shoulder: Points, right_shoulder: Points, left_hip: Points, right_hip: Points, left_knee: Points, right_knee: Points) -> tuple[bool, float]:
+    """両肩・両腰・両膝の位置関係からカメラ画角の正常異常を判定"""
+    left_shoulder_points = (left_shoulder.x, left_shoulder.y)
+    right_shoulder_points = (right_shoulder.x, right_shoulder.y)
+    left_hip_points = (left_hip.x, left_hip.y)
+    right_hip_points = (right_hip.x, right_hip.y)
     left_knee_points = (left_knee.x, left_knee.y)
     right_knee_points = (right_knee.x, right_knee.y)
 
+    shoulder_distance = np.linalg.norm(np.array(left_shoulder_points) - np.array(right_shoulder_points))
+    hip_distance = np.linalg.norm(np.array(left_hip_points) - np.array(right_hip_points))
     knee_distance = np.linalg.norm(np.array(left_knee_points) - np.array(right_knee_points))
+
+    body_distance = shoulder_distance + hip_distance + knee_distance
     
-    if knee_distance < CHECK_CAMERA_VIEW_DISTANCE_THRESHOLD:
-        return True, knee_distance # 画角OK
+    if body_distance < CHECK_CAMERA_VIEW_BODY_DISTANCE_THRESHOLD:
+        return True, body_distance # 画角OK
     else:
-        return False, knee_distance # 画角NG
+        return False, body_distance # 画角NG
 
 
-def check_camera_view_from_mediapipe_left_elbow_reliability(landmarks) -> tuple[bool, float]:
-    left_elbow_reliability = landmarks[POSE_LANDMARKS["left_elbow"]].visibility
-    print(f"left_elbow_visibility:{left_elbow_reliability}")
+def check_camera_view_from_knee_distance(left_knee: Points, right_knee: Points) -> tuple[bool, float]:
+        left_knee_points = (left_knee.x, left_knee.y)
+        right_knee_points = (right_knee.x, right_knee.y)
+
+        knee_distance = np.linalg.norm(np.array(left_knee_points) - np.array(right_knee_points))
+
+        if knee_distance < CHECK_CAMERA_VIEW_KNEE_DISTANCE_THRESHOLD:
+            return True, knee_distance # 画角OK
+        else:
+            return False, knee_distance # 画角NG        
+
+
+def check_camera_view_from_mediapipe_left_knee_reliability(landmarks) -> tuple[bool, float]:
+    left_knee_reliability = landmarks[POSE_LANDMARKS["left_knee"]].visibility
+    print(f"left_knee_visibility:{left_knee_reliability}")
     
-    if left_elbow_reliability < CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD:
-        return True, left_elbow_reliability # 画角OK
+    if left_knee_reliability < CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD:
+        return True, left_knee_reliability # 画角OK
     else:
-        return False, left_elbow_reliability # 画角NG
+        return False, left_knee_reliability # 画角NG
 
 
 def check_camera_view_form_right_shoulder_wrist(right_shoulder: Points, right_wrist: Points) -> tuple[bool, float]:
@@ -475,19 +496,20 @@ def main():
             # カメラの画角チェック
             if rep_state.frame_count == 1:
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_knee_distance(pt["left_knee"], pt["right_knee"])
-                # camera_view_ok_flg_from_mediapipe_left_elbow_reliability, left_elbow_reliability = check_camera_view_from_mediapipe_left_elbow_reliability(landmarks)
-                camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
+                # camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
+                camera_view_ok_flg_from_mediapipe_left_knee_reliability, left_elbow_reliability = check_camera_view_from_mediapipe_left_knee_reliability(landmarks)
+                # camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
 
                 global camera_view_ok_flg
-                if (camera_view_ok_flg_from_distance == True) and (camera_view_form_right_shoulder_wrist == True):
+                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_left_knee_reliability == True):
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
 
             if camera_view_ok_flg == True:
-                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{tilt:.1f})")
+                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_elbow_reliability:.3f})")
             elif camera_view_ok_flg == False:
-                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{tilt:.1f})")
+                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{left_elbow_reliability:.3f})")
 
             # 体感前傾角度の良否判定
             if status == "stay" and before_status == "down" and before_before_status == "down":
