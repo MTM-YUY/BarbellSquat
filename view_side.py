@@ -498,18 +498,19 @@ def main():
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_knee_distance(pt["left_knee"], pt["right_knee"])
                 # camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
                 camera_view_ok_flg_from_mediapipe_left_knee_reliability, left_elbow_reliability = check_camera_view_from_mediapipe_left_knee_reliability(landmarks)
-                # camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
+                camera_view_form_right_shoulder_wrist, tilt = check_camera_view_form_right_shoulder_wrist(pt["right_shoulder"], pt["right_wrist"])
 
                 global camera_view_ok_flg
-                if (camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_left_knee_reliability == True):
+                """三つのフラグの内二つがたてば画角を正常とみなす"""
+                if ((camera_view_ok_flg_from_distance == True) and (camera_view_ok_flg_from_mediapipe_left_knee_reliability == True)) or ((camera_view_ok_flg_from_distance == True) and (camera_view_form_right_shoulder_wrist == True)) or ((camera_view_ok_flg_from_mediapipe_left_knee_reliability == True) and (camera_view_form_right_shoulder_wrist == True)):
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
 
             if camera_view_ok_flg == True:
-                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_elbow_reliability:.3f})")
+                draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_elbow_reliability:.3f},{tilt:.1f})")
             elif camera_view_ok_flg == False:
-                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{left_elbow_reliability:.3f})")
+                draw_label(frame, "camera_view_NG", f"camera_view_NG:({body_distance:.2f},{left_elbow_reliability:.3f},{tilt:.1f})")
 
             # 体感前傾角度の良否判定
             if status == "stay" and before_status == "down" and before_before_status == "down":
