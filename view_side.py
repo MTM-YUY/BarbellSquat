@@ -14,8 +14,10 @@ RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 15       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
-TORSO_TOO_UPRIGHT = 35
-TORSO_TOO_FORWARD = 45
+GAZE_START_THRESHOLD = (28, 42)
+GAZE_BOTTOM_THRESHOLD = (30, 47)
+TORSO_TOO_UPRIGHT_THRESHOLD = 35
+TORSO_TOO_FORWARD_THRESHOLD = 45
 CHECK_CAMERA_VIEW_KNEE_DISTANCE_THRESHOLD = 40 # 画角が正しいか否かを判断する閾値：膝の距離の合計
 CHECK_CAMERA_VIEW_BODY_DISTANCE_THRESHOLD = 75 # 画角が正しいか否かを判断する閾値：肩・腰・膝の距離の合計
 CHECK_CAMERA_VIEW_RELIABILITY_THRESHOLD = 0.03 # 画角が正常か否かを判断する閾値：MediaPipeの信頼度(左膝)
@@ -83,8 +85,8 @@ RIGHT_CONNECTIONS = [
 REVIEW_COMMENTS = {
     "deep_depth": "・臀部を下げすぎています。怪我の原因となるので太ももが床と平衡になる程度で止めましょう\n",
     "shallow_depth": "・臀部が下がりきっていません。太ももが床と平行になる程度まで臀部を降ろしましょう\n",
-    "head_too_tilt": "・下を向き過ぎです。頭の角度と身体の角度が同じになるようにしましょう\n",
-    "head_not_tilt": "・前を向き過ぎです。頭の角度と身体の角度が同じになるようにしましょう\n",
+    "gaze_close": "・下を向きすぎています。常に1.2m~1.5m先を見るようにしましょう\n",
+    "gaze_far": "・前を向きすぎています。常に1.2m~1.5m先を見るようにしましょう\n",
     "head_unstable": "・下を向き過ぎたり前を見過ぎたりしています。頭の角度と身体の角度が同じになるようにしましょう\n",
     "torso_too_upright": "・体幹が直立すぎるので少し前傾しましょう\n",
     "torso_too_forward": "・体幹が前傾過ぎるので少し後傾しましょう\n"
@@ -104,8 +106,10 @@ HUD_LAYOUT = {
     "status":            (30, 30,  COLOR_GREEN),    # down/up/stay ステータス
     "reps":              (30, 60,  COLOR_GREEN),    # rep回数
     "recording":         (30, 90,  COLOR_MAGENTA),  # rep記録中フラグ("now")
-    "theta_head_body":   (30, 120, COLOR_CYAN),     # 頭と身体の角度差
-    "head_tilt":         (30, 150, COLOR_RED),      # 頭の向き警告(head_not_tilt/head_too_tilt)
+    "gaze":              (30, 120, COLOR_CYAN),     # 視線
+    "gaze_true":         (30, 150, COLOR_GREEN),    # 視線おｋ
+    "gaze_close":        (30, 150, COLOR_RED),      # 視線下すぎ
+    "gaze_far":          (30, 150, COLOR_RED),      # 視線前すぎ
     "depth_result":      (30, 180, COLOR_RED),      # rep終了後のしゃがみ深度判定結果
     "torso_too_upright": (30, 180, COLOR_RED),      # 体幹が直立しすぎ
     "torso_too_forward": (30, 180, COLOR_RED),      # 体幹が前傾しすぎ
@@ -357,6 +361,40 @@ def ensure_rep_dirs(base: str, round_num: int, mov_name: str, rep_count: int) ->
         os.makedirs(d, exist_ok=True)
     return dirs
 
+def judge_start_gaze(eye_point: Points, mouth_point: Points) -> tuple[str, float]:
+    dx = eye_point.x - mouth_point.x
+    dy = eye_point.y - mouth_point.y # 画像ではy座標は下が正なのでマイナスをつける
+
+    angle_rad = math.atan2(dx, -dy)
+
+    # ラジアンから度に変換 少数第二位に丸め込み
+    angle_deg = round(math.degrees(angle_rad), 2)
+
+    if GAZE_START_THRESHOLD[0] < angle_deg and angle_deg < GAZE_START_THRESHOLD[1]:
+        return "gaze_true", angle_deg
+    elif angle_deg < GAZE_START_THRESHOLD[0]:
+        return "gaze_far", angle_deg
+    elif GAZE_START_THRESHOLD[1] < angle_deg:
+        return "gaze_close", angle_deg
+
+def judge_bottom_gaze(eye_point: Points, mouth_point: Points) -> tuple[str, float]:
+        dx = eye_point.x - mouth_point.x
+        dy = eye_point.y - mouth_point.y # 画像ではy座標は下が正なのでマイナスをつける
+    
+        angle_rad = math.atan2(dx, -dy)
+    
+        # ラジアンから度に変換 少数第二位に丸め込み
+        angle_deg = round(math.degrees(angle_rad), 2)
+    
+        if GAZE_BOTTOM_THRESHOLD[0] < angle_deg and angle_deg < GAZE_BOTTOM_THRESHOLD[1]:
+            return "gaze_true", angle_deg
+        elif angle_deg < GAZE_BOTTOM_THRESHOLD[0]:
+            return "gaze_far", angle_deg
+        elif GAZE_BOTTOM_THRESHOLD[1] < angle_deg:
+            return "gaze_close", angle_deg
+
+
+
 def judge_torso_tilt(hip_point: Points, shoulder_point: Points) -> tuple[str, int]:
     dx = shoulder_point.x - hip_point.x
     dy = shoulder_point.y - hip_point.y
@@ -367,9 +405,9 @@ def judge_torso_tilt(hip_point: Points, shoulder_point: Points) -> tuple[str, in
     angle_deg = int(180 - math.degrees(angle_rad))
 
     """35度未満は直立すぎ、45度以上は前傾すぎ"""
-    if TORSO_TOO_FORWARD < angle_deg:
+    if TORSO_TOO_FORWARD_THRESHOLD < angle_deg:
         return "too_forward", angle_deg
-    elif angle_deg < TORSO_TOO_UPRIGHT:
+    elif angle_deg < TORSO_TOO_UPRIGHT_THRESHOLD:
         return "too_upright", angle_deg
     else:
         return "none", angle_deg
@@ -495,6 +533,7 @@ def main():
 
             # カメラの画角チェック
             if rep_state.frame_count == 1:
+                # カメラの画角チェック
                 camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_knee_distance(pt["left_knee"], pt["right_knee"])
                 # camera_view_ok_flg_from_distance, body_distance = check_camera_view_from_distance(pt["left_shoulder"], pt["right_shoulder"], pt["left_hip"], pt["right_hip"], pt["left_knee"], pt["right_knee"])
                 camera_view_ok_flg_from_mediapipe_left_knee_reliability, left_elbow_reliability = check_camera_view_from_mediapipe_left_knee_reliability(landmarks)
@@ -506,6 +545,20 @@ def main():
                     camera_view_ok_flg = True
                 else:
                     camera_view_ok_flg = False
+
+
+                # 視線の良否判定
+                start_gaze_flg, start_gaze = judge_start_gaze(pt["right_eye"], pt["right_mouth"])      
+                draw_label(frame, "gaze", f"gaze:{start_gaze:.2f}")
+
+                if start_gaze_flg == "gaze_true":
+                    draw_label(frame, "gaze_true", f"gaze:{start_gaze_flg}")
+                elif start_gaze_flg == "gaze_far":
+                    rep_state.review_flg["gaze_far"] = True
+                    draw_label(frame, "gaze_far", f"gaze:{start_gaze_flg}")
+                elif start_gaze_flg == "gaze_close":
+                    rep_state.review_flg["gaze_close"] = True
+                    draw_label(frame, "gaze_close", f"gaze:{start_gaze_flg}")
 
             if camera_view_ok_flg == True:
                 draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_elbow_reliability:.3f},{tilt:.1f})")
@@ -525,23 +578,27 @@ def main():
                     draw_label(frame, "torso_ok", f"torso_ok:{torso_tilt}")
 
 
+            # 顔の傾きの良否判定
+            if status == "stay" and before_status == "down" and before_before_status == "down":
+                bottom_gaze_flg, bottom_gaze = judge_bottom_gaze(pt["right_eye"], pt["right_mouth"])
+
+                
+                draw_label(frame, "gaze", f"gaze:{bottom_gaze:.2f}")
+
+                if bottom_gaze_flg == "gaze_true":
+                    draw_label(frame, "gaze_true", f"gaze:{bottom_gaze_flg}")
+                elif bottom_gaze_flg == "gaze_far":
+                    rep_state.review_flg["gaze_far"] = True
+                    draw_label(frame, "gaze_far", f"gaze:{bottom_gaze_flg}")
+                elif bottom_gaze_flg == "gaze_close":
+                    rep_state.review_flg["gaze_close"] = True
+                    draw_label(frame, "gaze_close", f"gaze:{bottom_gaze_flg}")
+                
+
             # 角度計算
             theta_hip = calculate_theta(pt["right_knee"], pt["right_hip"], pt["right_shoulder"])
             theta_knee = calculate_theta(pt["right_hip"], pt["right_knee"], pt["right_heel"])
 
-            # 頭の向き判定
-            theta_head_body, face_tilt, body_tilt = compute_head_angle(
-                pt["right_eye"], pt["right_mouth"],
-                pt["right_shoulder"], pt["right_hip"]
-            )
-            if theta_head_body >= HEAD_ANGLE_THRESHOLD:
-                if face_tilt > body_tilt:
-                    rep_state.review_flg["head_not_tilt"] = True
-                    draw_label(frame, "head_tilt", "head_not_tilt")
-                else:
-                    rep_state.review_flg["head_too_tilt"] = True
-                    draw_label(frame, "head_tilt", "head_too_tilt")
-            draw_label(frame, "theta_head_body", f"theta:{theta_head_body:.1f}")
 
             # CSVバッファへ追記
             csv_buf.append_point(
@@ -604,11 +661,11 @@ def main():
         frame_count += 1
 
 
-        # 顔の向きが下向きすぎと前向きすぎの両方判定された場合の処理　出力コメントを変更
-        if rep_state.review_flg["head_not_tilt"] and rep_state.review_flg["head_too_tilt"]:
-            rep_state.review_flg["head_not_tilt"] = False
-            rep_state.review_flg["head_too_tilt"] = False
-            rep_state.review_flg["head_unstable"] = True
+        # # 顔の向きが下向きすぎと前向きすぎの両方判定された場合の処理　出力コメントを変更
+        # if rep_state.review_flg["head_not_tilt"] and rep_state.review_flg["head_too_tilt"]:
+        #     rep_state.review_flg["head_not_tilt"] = False
+        #     rep_state.review_flg["head_too_tilt"] = False
+        #     rep_state.review_flg["head_unstable"] = True
 
         # レビューコメント書き込み
         if camera_view_ok_flg == True:
