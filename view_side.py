@@ -14,7 +14,6 @@ RESIZE_SCALE = 1.0
 STATUS_THRESHOLD = 15       # 腰のy座標変動量（px）でstatus判定するしきい値
 HEAD_ANGLE_THRESHOLD = 5    # 頭と身体の傾き差（度）で警告するしきい値
 POINT_HIP_WINDOW = 10       # 腰y座標を保持するフレーム数
-GAZE_START_THRESHOLD = (28, 42)
 GAZE_BOTTOM_THRESHOLD = (30, 47)
 TORSO_TOO_UPRIGHT_THRESHOLD = 35
 TORSO_TOO_FORWARD_THRESHOLD = 45
@@ -77,6 +76,7 @@ RIGHT_CONNECTIONS = [
     (12, 24),
     (24, 26),
     (26, 30),
+    (30, 32),
     (11, 23),
     (23, 25),
     (25, 27),
@@ -242,8 +242,6 @@ def draw_landmarks(frame, landmarks, frame_shape):
     """右半身の骨格を描画する。"""
     h, w = frame_shape[:2]
     for i in LANDMARKS_INDICES:
-        if i == 32:
-            continue
         lm = landmarks[i]
         x, y = int(lm.x * w), int(lm.y * h)
         cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
@@ -361,21 +359,6 @@ def ensure_rep_dirs(base: str, round_num: int, mov_name: str, rep_count: int) ->
         os.makedirs(d, exist_ok=True)
     return dirs
 
-def judge_start_gaze(eye_point: Points, mouth_point: Points) -> tuple[str, float]:
-    dx = eye_point.x - mouth_point.x
-    dy = eye_point.y - mouth_point.y # 画像ではy座標は下が正なのでマイナスをつける
-
-    angle_rad = math.atan2(dx, -dy)
-
-    # ラジアンから度に変換 少数第二位に丸め込み
-    angle_deg = round(math.degrees(angle_rad), 2)
-
-    if GAZE_START_THRESHOLD[0] < angle_deg and angle_deg < GAZE_START_THRESHOLD[1]:
-        return "gaze_true", angle_deg
-    elif angle_deg < GAZE_START_THRESHOLD[0]:
-        return "gaze_far", angle_deg
-    elif GAZE_START_THRESHOLD[1] < angle_deg:
-        return "gaze_close", angle_deg
 
 def judge_bottom_gaze(eye_point: Points, mouth_point: Points) -> tuple[str, float]:
         dx = eye_point.x - mouth_point.x
@@ -392,7 +375,6 @@ def judge_bottom_gaze(eye_point: Points, mouth_point: Points) -> tuple[str, floa
             return "gaze_far", angle_deg
         elif GAZE_BOTTOM_THRESHOLD[1] < angle_deg:
             return "gaze_close", angle_deg
-
 
 
 def judge_torso_tilt(hip_point: Points, shoulder_point: Points) -> tuple[str, int]:
@@ -546,19 +528,6 @@ def main():
                 else:
                     camera_view_ok_flg = False
 
-
-                # 視線の良否判定
-                start_gaze_flg, start_gaze = judge_start_gaze(pt["right_eye"], pt["right_mouth"])      
-                draw_label(frame, "gaze", f"gaze:{start_gaze:.2f}")
-
-                if start_gaze_flg == "gaze_true":
-                    draw_label(frame, "gaze_true", f"gaze:{start_gaze_flg}")
-                elif start_gaze_flg == "gaze_far":
-                    rep_state.review_flg["gaze_far"] = True
-                    draw_label(frame, "gaze_far", f"gaze:{start_gaze_flg}")
-                elif start_gaze_flg == "gaze_close":
-                    rep_state.review_flg["gaze_close"] = True
-                    draw_label(frame, "gaze_close", f"gaze:{start_gaze_flg}")
 
             if camera_view_ok_flg == True:
                 draw_label(frame, "camera_view_OK", f"camera_view_OK:({body_distance:.2f},{left_elbow_reliability:.3f},{tilt:.1f})")
